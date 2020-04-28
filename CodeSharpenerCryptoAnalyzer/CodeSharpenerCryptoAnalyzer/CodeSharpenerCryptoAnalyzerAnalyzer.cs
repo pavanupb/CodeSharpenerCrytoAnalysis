@@ -35,11 +35,11 @@ namespace CodeSharpenerCryptoAnalyzer
 
         private static CryslJsonModel _cryslSpecificationModel;
 
-        private static ServiceProvider serviceProvider { get; set; }
+        private static ServiceProvider _serviceProvider { get; set; }
 
-        private static Dictionary<string, AddConstraints> _additionalConstraintsDict = new Dictionary<string, AddConstraints>();
+        private static Dictionary<string, AddConstraints> AdditionalConstraintsDict;
 
-        private static List<KeyValuePair<string, string>> EventsOrderDict = new List<KeyValuePair<string, string>>();
+        private static List<KeyValuePair<string, string>> EventsOrderDict;
 
         private static List<string> EventOrderContraint;
         
@@ -51,9 +51,9 @@ namespace CodeSharpenerCryptoAnalyzer
             services.AddTransient<IConstraintsSectionAnalyzer, ConstraintsSectionAnalyzer>();
             services.AddTransient<IOrderSectionAnalyzer, OrderSectionAnalyzer>();
             services.AddTransient<ICryslObjectBuilder, CryslObjectBuilder>();
-            serviceProvider = services.BuildServiceProvider();
+            _serviceProvider = services.BuildServiceProvider();
 
-            ICryslObjectBuilder cSharpObjectBuilder = serviceProvider.GetService<ICryslObjectBuilder>();
+            ICryslObjectBuilder cSharpObjectBuilder = _serviceProvider.GetService<ICryslObjectBuilder>();
             CryslResult cryslCompilationModel = cSharpObjectBuilder.CryslToCSharpBuilder();
 
             if (cryslCompilationModel.IsValid)
@@ -74,8 +74,9 @@ namespace CodeSharpenerCryptoAnalyzer
 
             //All global assignements to analyzer goes below
             _cryslSpecificationModel = cryslCompilationModel;
-            _additionalConstraintsDict.Clear();
-            var commonUtilities = serviceProvider.GetService<ICommonUtilities>();
+            AdditionalConstraintsDict = new Dictionary<string, AddConstraints>();
+            EventsOrderDict = new List<KeyValuePair<string, string>>();
+            var commonUtilities = _serviceProvider.GetService<ICommonUtilities>();
             EventOrderContraint = commonUtilities.GetEventOrderList(_cryslSpecificationModel);
 
         }
@@ -119,13 +120,13 @@ namespace CodeSharpenerCryptoAnalyzer
                         var cryptoMethods = methods.Crypto_Signature.Select(y => y).Where(x => x.Method_Name.ToString().Equals(identifier.Identifier.Value.ToString()));
                         if (cryptoMethods.Count() > 0)
                         {
-                            IEventSectionAnalyzer analyzer = serviceProvider.GetService<IEventSectionAnalyzer>();
+                            IEventSectionAnalyzer analyzer = _serviceProvider.GetService<IEventSectionAnalyzer>();
                             var identifierSymbolInfo = (IMethodSymbol)context.SemanticModel.GetSymbolInfo(identifier).Symbol;
                             //Check for Valid Events
                             ValidEvents validEvents = analyzer.AnalyzeMemAccessExprSyntax(identifier, cryptoMethods, methods, _cryslSpecificationModel, context, identifierSymbolInfo, node.Span);
 
                             //Check for Valid Order
-                            IOrderSectionAnalyzer orderSectionAnalyzer = serviceProvider.GetService<IOrderSectionAnalyzer>();
+                            IOrderSectionAnalyzer orderSectionAnalyzer = _serviceProvider.GetService<IOrderSectionAnalyzer>();
                             bool isOrderValid = orderSectionAnalyzer.IsValidOrder(validEvents, context.ContainingSymbol.ToString(), EventsOrderDict, EventOrderContraint);
 
                             //Report If Order Constraint is Violated
@@ -140,7 +141,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                 //Check for Valid Constraints
                                 foreach (var parameter in validEvents.ValidEventsDict)
                                 {
-                                    IConstraintsSectionAnalyzer constraintsSectionAnalyzer = serviceProvider.GetService<IConstraintsSectionAnalyzer>();
+                                    IConstraintsSectionAnalyzer constraintsSectionAnalyzer = _serviceProvider.GetService<IConstraintsSectionAnalyzer>();
                                     List<ConstraintsModel> satisfiedConstraintsList = new List<ConstraintsModel>();
                                     foreach (var parameterValue in parameter.Value)
                                     {
@@ -155,7 +156,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                                 EventVariableDeclarator = identifier.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>().First().Identifier.Text,
                                                 ConstraintsModels = satisfiedConstraintsList
                                             };
-                                            _additionalConstraintsDict.Add(identifierSymbolInfo.ReturnType.ToString(), additionalConstraints);
+                                            AdditionalConstraintsDict.Add(identifierSymbolInfo.ReturnType.ToString(), additionalConstraints);
                                         }
                                     }
 
@@ -205,12 +206,12 @@ namespace CodeSharpenerCryptoAnalyzer
                                 if (cryptoMethods.Count() > 0)
                                 {
                                     //Set the flag to true as a valid event
-                                    IEventSectionAnalyzer analyzer = serviceProvider.GetService<IEventSectionAnalyzer>();
+                                    IEventSectionAnalyzer analyzer = _serviceProvider.GetService<IEventSectionAnalyzer>();
                                     var validEvents = analyzer.AnalyzeAssignmentExprSyntax(cryptoMethods, _cryslSpecificationModel, context, leftExprSymbolInfo);
                                     isValidEvent = validEvents.IsValidEvent;
 
                                     //Check for Valid Order
-                                    IOrderSectionAnalyzer orderSectionAnalyzer = serviceProvider.GetService<IOrderSectionAnalyzer>();
+                                    IOrderSectionAnalyzer orderSectionAnalyzer = _serviceProvider.GetService<IOrderSectionAnalyzer>();
                                     bool isOrderValid = orderSectionAnalyzer.IsValidOrder(validEvents, context.ContainingSymbol.ToString(), EventsOrderDict, EventOrderContraint);
                                     if (!isOrderValid)
                                     {
@@ -229,7 +230,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                         rightExprValue = rightExprSymbolInfo.Name.ToString();
                                     }
                                     //Check if primary constraints are satified if any
-                                    IConstraintsSectionAnalyzer constraintsSectionAnalyzer = serviceProvider.GetService<IConstraintsSectionAnalyzer>();
+                                    IConstraintsSectionAnalyzer constraintsSectionAnalyzer = _serviceProvider.GetService<IConstraintsSectionAnalyzer>();
                                     bool isPrimaryConstraintSatisfied = constraintsSectionAnalyzer.IsPropertyConstraintSatisfied(_cryslSpecificationModel, validEvents, rightExprValue);
                                     if (!isPrimaryConstraintSatisfied)
                                     {
@@ -238,11 +239,11 @@ namespace CodeSharpenerCryptoAnalyzer
 
                                     //Check if additional constraints are satisfied if any
                                     AddConstraints additionalConstraints = new AddConstraints();
-                                    _additionalConstraintsDict.TryGetValue(_cryslSpecificationModel.Spec_Section.Class_Name, out additionalConstraints);
+                                    AdditionalConstraintsDict.TryGetValue(_cryslSpecificationModel.Spec_Section.Class_Name, out additionalConstraints);
 
                                     if (additionalConstraints.EventVariableDeclarator.ToString().Equals(localInvocatorSymbolInfo.Name.ToString()))
                                     {
-                                        constraintsSectionAnalyzer = serviceProvider.GetService<IConstraintsSectionAnalyzer>();
+                                        constraintsSectionAnalyzer = _serviceProvider.GetService<IConstraintsSectionAnalyzer>();
                                         bool isAdditionalConstraintSatisfied = constraintsSectionAnalyzer.IsAdditionalConstraintSatisfied(additionalConstraints, leftExprSymbolInfo, rightExprValue, _cryslSpecificationModel.Object_Section.Objects_Declaration, validEvents);
                                         if (!isAdditionalConstraintSatisfied)
                                         {

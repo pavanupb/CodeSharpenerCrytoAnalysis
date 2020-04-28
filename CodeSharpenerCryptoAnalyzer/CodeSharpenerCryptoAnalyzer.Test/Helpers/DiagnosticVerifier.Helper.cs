@@ -5,7 +5,10 @@ using Microsoft.CodeAnalysis.Text;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Security.Cryptography;
 
 namespace TestHelper
 {
@@ -19,6 +22,9 @@ namespace TestHelper
         private static readonly MetadataReference SystemCoreReference = MetadataReference.CreateFromFile(typeof(Enumerable).Assembly.Location);
         private static readonly MetadataReference CSharpSymbolsReference = MetadataReference.CreateFromFile(typeof(CSharpCompilation).Assembly.Location);
         private static readonly MetadataReference CodeAnalysisReference = MetadataReference.CreateFromFile(typeof(Compilation).Assembly.Location);
+        private static readonly MetadataReference AesReference = MetadataReference.CreateFromFile(typeof(Aes).Assembly.Location);
+        private static readonly MetadataReference SymmetricAlgorithmReference = MetadataReference.CreateFromFile(typeof(SymmetricAlgorithm).Assembly.Location);
+        private static readonly MetadataReference StreamWriterReference = MetadataReference.CreateFromFile(typeof(StreamWriter).Assembly.Location);
 
         internal static string DefaultFilePathPrefix = "Test";
         internal static string CSharpDefaultFileExt = "cs";
@@ -146,13 +152,21 @@ namespace TestHelper
 
             var projectId = ProjectId.CreateNewId(debugName: TestProjectName);
 
+            var dotnetCoreDir = Path.GetDirectoryName(typeof(object).GetTypeInfo().Assembly.Location);
+
             var solution = new AdhocWorkspace()
                 .CurrentSolution
                 .AddProject(projectId, TestProjectName, TestProjectName, language)
                 .AddMetadataReference(projectId, CorlibReference)
                 .AddMetadataReference(projectId, SystemCoreReference)
                 .AddMetadataReference(projectId, CSharpSymbolsReference)
-                .AddMetadataReference(projectId, CodeAnalysisReference);
+                .AddMetadataReference(projectId, CodeAnalysisReference)
+                .AddMetadataReference(projectId, AesReference)
+                .AddMetadataReference(projectId, SymmetricAlgorithmReference)
+                .AddMetadataReference(projectId, StreamWriterReference)
+                .AddMetadataReference(projectId, MetadataReference.CreateFromFile(Path.Combine(dotnetCoreDir, "System.Runtime.dll")));
+
+
 
             int count = 0;
             foreach (var source in sources)
