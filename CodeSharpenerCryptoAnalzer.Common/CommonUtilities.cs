@@ -47,14 +47,28 @@ namespace CodeSharpenerCryptoAnalzer.Common
             return isMethodInEvents;
         }
 
-        /*public bool IsExpressionInEvents(CryptoSignature cryptoMethod, ISymbol expressionSymbol, ICollection<ObjectsDeclaration> objectsDeclarations)
+        /// <summary>
+        /// Gets the Invocator Type
+        /// </summary>
+        /// <param name="invocatorSymbol"></param>
+        /// <returns></returns>
+        public string GetInvocatorType(ISymbol invocatorSymbol)
         {
-            bool isExpressionInEvents = false;
-            if(cryptoMethod.Method_Name.ToString().Equals(expressionSymbol.))
+            SymbolKind symbolKind = invocatorSymbol.Kind;
+            switch (symbolKind)
+            {
+                case SymbolKind.NamedType:
+                    var nameTypeSymbol = (INamedTypeSymbol)invocatorSymbol;
+                    return nameTypeSymbol.ToString();
 
+                case SymbolKind.Local:
+                    var localSymbol = (ILocalSymbol)invocatorSymbol;
+                    return localSymbol.Type.ToString();
 
-            return isExpressionInEvents;
-        }*/
+                default: return invocatorSymbol.ToString();
+            }
+
+        }
 
         /// <summary>
         /// Check If Satisfies the Aggregator Condition
@@ -178,7 +192,24 @@ namespace CodeSharpenerCryptoAnalzer.Common
         private static bool IsArgumentValid(ArgumentTypes argument, IParameterSymbol methodSymbol, ICollection<ObjectsDeclaration> objectsDeclarations)
         {
             string objectType = GetTypeString(argument.Argument, objectsDeclarations);
-            string methodSymbolType = $"{methodSymbol.Type.ContainingNamespace}.{methodSymbol.Type.Name.ToString()}";
+            string methodSymbolType = string.Empty;
+            if (methodSymbol.Type.ContainingNamespace != null)
+            {
+                methodSymbolType = $"{methodSymbol.Type.ContainingNamespace}.{methodSymbol.Type.Name.ToString()}";
+            }
+            //For Primitive Data Types
+            else
+            {
+                if (methodSymbol.Type.Kind.Equals(SymbolKind.ArrayType))
+                {
+                    var arrayTypeSymbol = (IArrayTypeSymbol)methodSymbol.Type;
+                    methodSymbolType = arrayTypeSymbol.ElementType.ToString();
+                }
+                else
+                {
+                    methodSymbolType = methodSymbol.Type.ToString();
+                }
+            }
             if (!string.IsNullOrEmpty(objectType))
             {
                 if (methodSymbolType.Equals(objectType))

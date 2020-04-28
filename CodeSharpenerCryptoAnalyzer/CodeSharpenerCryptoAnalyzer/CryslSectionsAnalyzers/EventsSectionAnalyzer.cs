@@ -32,11 +32,11 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
         /// <param name="cryslData"></param>
         /// <param name="context"></param>
         /// <returns></returns>
-        public ValidEvents AnalyzeMemAccessExprSyntax(IdentifierNameSyntax identifier, IEnumerable<CryptoSignature> cryptoMethods, Methods methods, CryslJsonModel cryslData, SyntaxNodeAnalysisContext context, IMethodSymbol identifierSymbolInfo, TextSpan nodeSPan)
+        public ValidEvents AnalyzeMemAccessExprSyntax(IdentifierNameSyntax identifier, IEnumerable<CryptoSignature> cryptoMethods, Methods methods, CryslJsonModel cryslData, SyntaxNodeAnalysisContext context, IMethodSymbol identifierSymbolInfo, TextSpan nodeSPan, string invocatorType)
         {
             ValidEvents validEvents = new ValidEvents();
             // Check for valid event only if Identifier is of Spec type in Crysl.
-            if (identifierSymbolInfo.ReturnType.ToString().Equals(cryslData.Spec_Section.Class_Name))
+            if (invocatorType.Equals(cryslData.Spec_Section.Class_Name))
             {
                 List<MethodSignatureModel> methodSignatureModelsList = new List<MethodSignatureModel>();
                 foreach (var method in cryptoMethods)
@@ -73,16 +73,26 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
                             validEventsDict[method.Event_Var_Name] = methodSignatureModelsList;
                         }
                         //Check if the Aggregator Condition Satisfies
-                        bool isAggregatorCondition = commonUtilities.CheckAggregator(validEventsDict, methods.Aggregator.Aggregators);
-                        if(isAggregatorCondition)
+                        if (methods.Aggregator != null)
                         {
-                            validEvents.IsValidEvent = true;
-                            validEvents.ValidEventsDict = validEventsDict;
-                            validEvents.AggregatorName = methods.Aggregator.Aggregator_Name;
+                            bool isAggregatorCondition = commonUtilities.CheckAggregator(validEventsDict, methods.Aggregator.Aggregators);
+                            if (isAggregatorCondition)
+                            {
+                                validEvents.IsValidEvent = true;
+                                validEvents.ValidEventsDict = validEventsDict;
+                                validEvents.AggregatorName = methods.Aggregator.Aggregator_Name;
+                            }
+                            else
+                            {
+                                validEvents.IsValidEvent = false;
+                            }
                         }
                         else
                         {
-                            validEvents.IsValidEvent = false;
+                            validEvents.IsValidEvent = true;
+                            validEvents.ValidEventsDict = validEventsDict;
+                            validEvents.AggregatorName = method.Event_Var_Name;
+                            
                         }
 
                         return validEvents;

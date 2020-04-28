@@ -2,6 +2,7 @@ SPEC System.Security.Cryptography.Aes
 
 OBJECTS
 	System.Security.Cryptography.CipherMode cipherMode;
+	System.Security.Cryptography.ICryptoTransform cryptoTransform;
 	System.String algorithm;
 	int keySize;
 	int blockSize;
@@ -17,9 +18,12 @@ EVENTS
 	s1: keySize = KeySize;
 	s2: cipherMode = Mode;
 	s3: blockSize = BlockSize;
+
+	CreateEncryptor: cryptoTransform = CreateEncryptor(key, IV);
+	
 	
 ORDER
-	Create, s1?, s2?, s3?
+	Create, s1?, s2?, s3?, CreateEncryptor
 
 CONSTRAINTS
 		algorithm in {"AES", "AesCryptoServiceProvider", "System.Security.Cryptography.AesCryptoServiceProvider", "AesManaged", "System.Security.Cryptography.AesManaged"};

@@ -19,5 +19,7 @@ namespace CodeSharpenerCryptoAnalzer.Common
         List<string> GetEventOrderList(CryslJsonModel cryslModel);
 
         Regex ListToRegex(IEnumerable<string> list);
+
+        string GetInvocatorType(ISymbol invocatorSymbol);
     }
 }

@@ -12,7 +12,7 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
 {
     public interface IEventSectionAnalyzer
     {
-        ValidEvents AnalyzeMemAccessExprSyntax(IdentifierNameSyntax identifier, IEnumerable<CryptoSignature> cryptoMethods, Methods methods, CryslJsonModel cryslData, SyntaxNodeAnalysisContext context, IMethodSymbol identifierSymbolInfo, TextSpan nodeSPan);
+        ValidEvents AnalyzeMemAccessExprSyntax(IdentifierNameSyntax identifier, IEnumerable<CryptoSignature> cryptoMethods, Methods methods, CryslJsonModel cryslData, SyntaxNodeAnalysisContext context, IMethodSymbol identifierSymbolInfo, TextSpan nodeSPan, string invocatorType);
         ValidEvents AnalyzeAssignmentExprSyntax(IEnumerable<CryptoSignature> cryptoMethods, CryslJsonModel cryslModel, SyntaxNodeAnalysisContext context, ISymbol leftExprSymbol);
     }
 }
