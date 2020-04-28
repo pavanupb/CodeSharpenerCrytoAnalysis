@@ -1,0 +1,32 @@
+SPEC System.Security.Cryptography.Aes
+
+OBJECTS
+	System.Security.Cryptography.CipherMode cipherMode;
+	System.String algorithm;
+	int keySize;
+	int blockSize;
+	byte key;
+	byte IV;
+	
+
+EVENTS
+	c1: Create();
+	c2: Create(algorithm);
+	Create := c1 | c2;
+
+	s1: keySize = KeySize;
+	s2: cipherMode = Mode;
+	s3: blockSize = BlockSize;
+	
+ORDER
+	Create, s1?, s2?, s3?
+
+CONSTRAINTS
+		algorithm in {"AES", "AesCryptoServiceProvider", "System.Security.Cryptography.AesCryptoServiceProvider", "AesManaged", "System.Security.Cryptography.AesManaged"};
+		algorithm in {"AES"} => keySize in {128, 256};
+		algorithm in {"AES"} => cipherMode in {"CBC"};
+		algorithm in {"AES"} => blockSize in {128};
+		
+ENSURES
+	generatedKey[key, IV, algorithm];
+

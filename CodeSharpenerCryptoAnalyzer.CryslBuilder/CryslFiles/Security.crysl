@@ -1,0 +1,31 @@
+SPEC javax.crypto.KeyGenerator
+
+OBJECTS
+	java.lang.String algorithm ;
+	int keySize ;
+	javax.crypto.SecretKey key ;
+
+EVENTS
+	g1 : getInstance ( algorithm ) ;
+	g2 : getInstance ( algorithm , _) ;
+	
+	GetInstance := g1 | g2 ;
+
+	i1 : init ( keySize ) ;
+	i2 : init ( keySize , _ ) ;
+	i3 : init (_) ;
+	i4 : init (_, _) ;
+	Init := i1 | i2 | i3 | i4 ;
+	
+	GenKey : key = generateKey ();
+	
+ORDER
+	GetInstance, Init?, GenKey
+
+CONSTRAINTS
+	algorithm in {"AES", " Blowfish "};
+	algorithm in {"AES"} => keySize in {128, 192, 256};
+	algorithm in {" Blowfish "} => keySize in {128, 192, 256, 320, 384, 448};
+	
+ENSURES
+	generatedKey [key, algorithm];

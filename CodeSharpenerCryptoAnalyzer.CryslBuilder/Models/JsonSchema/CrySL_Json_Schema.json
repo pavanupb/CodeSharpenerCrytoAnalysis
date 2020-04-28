@@ -1,0 +1,155 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "section-spec": {
+      "properties": {
+        "crysl_section": { "const": "SPEC" },
+        "class_name": { "type": "string" }
+      },
+      "required": [ "crysl_section", "class_name" ],
+      "additionalProperties": false
+    },
+    "section-object": {
+      "properties": {
+        "crysl_section": { "const": "OBJECTS" },
+        "objects_declaration": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "object_type": { "type": "string" },
+              "var_name": { "type": "string" }
+            },
+            "required": [ "object_type", "var_name" ]
+          }
+        }
+      },
+      "required": [ "crysl_section", "objects_declaration" ],
+      "additionalProperties": false
+    },
+    "section-event": {
+      "properties": {
+        "crysl_section": { "const": "EVENTS" },
+        "methods": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "crypto_signature": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "event_var_name": { "type": "string" },
+                    "method_name": { "type": "string" },
+                    "is_property": { "type": "boolean" },
+                    "argument_types": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "argument": { "type": "string" }
+                        }
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "aggregator": {
+                "type": "object",
+                "properties": {
+                  "aggregator_name": { "type": "string" },
+                  "aggregators": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "aggregator_event_varname": { "type": "string" },
+                        "aggregator_regex": { "type": "string" }
+                      }
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [ "crysl_section", "methods" ],
+      "additionalProperties": false
+    },
+    "section-order": {
+      "properties": {
+        "crysl_section": { "const": "ORDER" },
+        "event_order": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "aggregates": { "type": "string" },
+              "regex": { "type": "string" }
+            },
+            "required": [ "aggregates" ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["crysl_section"],
+      "additionalProperties": false
+    },
+    "section-constraints": {
+      "properties": {
+        "crysl_section": { "const": "CONSTRAINTS" },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "object_varname": { "type": "string" },
+              "constraints_list": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "additional_constraints": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "object_varname_additional_constraint": { "type": "string" },
+                    "additional_constraints_list": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalParameters": "false"
+                }
+              }
+            },
+            "required": [ "object_varname", "constraints_list" ],
+            "additionalParameters": false
+          }
+        }
+      },
+      "required": ["crysl_section"],
+      "additionalProperties": false
+    }
+  },
+
+  "type": "object",
+  "properties": {
+    "spec_section": { "$ref": "#/definitions/section-spec" },
+    "object_section": { "$ref": "#/definitions/section-object" },
+    "event_section": { "$ref": "#/definitions/section-event" },
+    "order_section": { "$ref": "#/definitions/section-order" },
+    "constraints_section": { "$ref": "#/definitions/section-constraints" }
+  },
+  "required": [ "spec_section", "object_section", "event_section", "order_section", "constraints_section" ],
+  "additionalProperties": false
+}
