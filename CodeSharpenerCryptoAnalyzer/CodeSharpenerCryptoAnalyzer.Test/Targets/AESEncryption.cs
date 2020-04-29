@@ -13,9 +13,8 @@ namespace CodeSharpenerCryptoAnalysis.Test
             using (Aes aesEncryption = Aes.Create("AES"))
             {
                 Aes aesEncryption1 = Aes.Create();
-                aesEncryption.Mode = CipherMode.ECB;                
                 aesEncryption.KeySize = 256;
-                aesEncryption.BlockSize = 128;
+                aesEncryption.Mode = CipherMode.ECB;                
 
                 ICryptoTransform encryptor = aesEncryption.CreateEncryptor(aesEncryption.Key, aesEncryption.IV);
 

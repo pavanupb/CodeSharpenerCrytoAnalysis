@@ -39,8 +39,9 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
             if (invocatorType.Equals(cryslData.Spec_Section.Class_Name))
             {
                 List<MethodSignatureModel> methodSignatureModelsList = new List<MethodSignatureModel>();
+                //Iterate through different signatures of the same event and add the matched signature event
                 foreach (var method in cryptoMethods)
-                {
+                {                    
                     ICommonUtilities commonUtilities = serviceProvider.GetService<ICommonUtilities>();
                     //Check if the Event is Valid
                     bool isValidEvent = commonUtilities.IsMethodInEvents(method, identifierSymbolInfo, cryslData.Object_Section.Objects_Declaration);
@@ -52,13 +53,18 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
                             Parameters = method.Argument_types,
                         };
                         methodSignatureModelsList.Add(currentValidEvent);
+
+                        validEvents.IsValidEvent = true;
+                        validEvents.IsProperty = false;
+                        validEvents.ValidMethods = currentValidEvent;
+                        validEvents.PropertyName = method.Event_Var_Name;                        
                         //Go to the Containing Method Declaration Node
-                        var containingMethodDeclarationNode = identifier.FirstAncestorOrSelf<MethodDeclarationSyntax>();
-                        var invExprSyntaxWalker = new InvocationExpressionSyntaxWalker(cryslData, context, nodeSPan);
+                        //var containingMethodDeclarationNode = identifier.FirstAncestorOrSelf<MethodDeclarationSyntax>();                        
+                        //var invExprSyntaxWalker = new InvocationExpressionSyntaxWalker(cryslData, context, nodeSPan);
                         //Walk through the current method to find all invocations of the given type
-                        invExprSyntaxWalker.Visit(containingMethodDeclarationNode);
-                        Dictionary<string, List<MethodSignatureModel>> validEventsDict = invExprSyntaxWalker.GetMethodsList();
-                        if (!validEventsDict.ContainsKey(method.Event_Var_Name))
+                        //invExprSyntaxWalker.Visit(containingMethodDeclarationNode);
+                        //Dictionary<string, List<MethodSignatureModel>> validEventsDict = invExprSyntaxWalker.GetMethodsList();
+                        /*if (!validEventsDict.ContainsKey(method.Event_Var_Name))
                         {
                             validEventsDict.Add(method.Event_Var_Name, methodSignatureModelsList);
                         }
@@ -71,15 +77,15 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
 
                             }
                             validEventsDict[method.Event_Var_Name] = methodSignatureModelsList;
-                        }
+                        }*/
                         //Check if the Aggregator Condition Satisfies
-                        if (methods.Aggregator != null)
+                        /*if (methods.Aggregator != null)
                         {
-                            bool isAggregatorCondition = commonUtilities.CheckAggregator(validEventsDict, methods.Aggregator.Aggregators);
+                            bool isAggregatorCondition = commonUtilities.CheckAggregator(validEventDict, methods.Aggregator.Aggregators);
                             if (isAggregatorCondition)
                             {
                                 validEvents.IsValidEvent = true;
-                                validEvents.ValidEventsDict = validEventsDict;
+                                validEvents.ValidEventsDict = validEventDict;
                                 validEvents.AggregatorName = methods.Aggregator.Aggregator_Name;
                             }
                             else
@@ -90,16 +96,17 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
                         else
                         {
                             validEvents.IsValidEvent = true;
-                            validEvents.ValidEventsDict = validEventsDict;
+                            validEvents.ValidEventsDict = validEventDict;
                             validEvents.AggregatorName = method.Event_Var_Name;
                             
-                        }
+                        }*/
 
                         return validEvents;
                     }
                 }
             }
             validEvents.IsValidEvent = false;
+            validEvents.IsProperty = false;
             return validEvents;
         }
 
@@ -110,17 +117,13 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
             {
                 MethodName = leftExprSymbol.Name.ToString()
             };
-            List<MethodSignatureModel> methodSignatureModelsList = new List<MethodSignatureModel>();
-            methodSignatureModelsList.Add(methodSignatureModel);
-
+            
             //Iterate through all the satisfied crypto signatures
             foreach (var cryptoMethod in cryptoMethods)
-            {
-                Dictionary<string, List<MethodSignatureModel>> validEventsDict = new Dictionary<string, List<MethodSignatureModel>>();
-                validEventsDict.Add(cryptoMethod.Event_Var_Name, methodSignatureModelsList);
+            { 
                 validEvents.IsValidEvent = true;
                 validEvents.AggregatorName = cryptoMethod.Event_Var_Name;
-                validEvents.ValidEventsDict = validEventsDict;
+                validEvents.ValidMethods = methodSignatureModel;
                 if(cryptoMethod.Is_property)
                 {
                     validEvents.IsProperty = true;

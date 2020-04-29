@@ -8,7 +8,7 @@ namespace CodeSharpenerCryptoAnalysis.AnalyzerModels
 {
     public class ValidEvents
     {
-        public Dictionary<string, List<MethodSignatureModel>> ValidEventsDict { get; set; }
+        public MethodSignatureModel ValidMethods { get; set; }
 
         public bool IsValidEvent { get; set; }
 

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using CodeSharpenerCryptoAnalysis.AnalyzerModels;
 using CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers;
+using CodeSharpenerCryptoAnalysis.Models;
 using CodeSharpenerCryptoAnalyzer.CryslBuilder;
 using CodeSharpenerCryptoAnalzer.Common;
 using CryslCSharpObjectBuilder.Models.CSharpModels;
@@ -43,6 +44,14 @@ namespace CodeSharpenerCryptoAnalyzer
 
         private static List<string> EventOrderContraint;
 
+        //Events Related Dictionary
+        //Key: Event_Var_Name
+        //Value: List of MethodSignatureModel
+        private static Dictionary<string, List<MethodSignatureModel>> ValidEventsDictionary;
+
+        //Dictionary of all analyzed events
+        private static Dictionary<string, Dictionary<string, List<MethodSignatureModel>>> EventsOrderDictionary;
+
         public override void Initialize(AnalysisContext context)
         {
             var services = new ServiceCollection();
@@ -71,11 +80,15 @@ namespace CodeSharpenerCryptoAnalyzer
             //Register all the syntax nodes that needs to be analyzed
             context.RegisterSyntaxNodeAction(AnalyzeMethodInvocationNode, SyntaxKind.InvocationExpression);
             context.RegisterSyntaxNodeAction(AnalyzeSimpleAssignmentExpression, SyntaxKind.SimpleAssignmentExpression);
+            context.RegisterCompilationStartAction(AnalyzeCompilationStartAction);
+            
 
             //All global assignements to analyzer goes below
             _cryslSpecificationModel = cryslCompilationModel;
             AdditionalConstraintsDict = new Dictionary<string, AddConstraints>();
             EventsOrderDict = new List<KeyValuePair<string, string>>();
+            ValidEventsDictionary = new Dictionary<string, List<MethodSignatureModel>>();
+            EventsOrderDictionary = new Dictionary<string, Dictionary<string, List<MethodSignatureModel>>>();
             var commonUtilities = _serviceProvider.GetService<ICommonUtilities>();
             EventOrderContraint = commonUtilities.GetEventOrderList(_cryslSpecificationModel);
 
@@ -127,56 +140,66 @@ namespace CodeSharpenerCryptoAnalyzer
                         {
                             IEventSectionAnalyzer analyzer = _serviceProvider.GetService<IEventSectionAnalyzer>();
                             var identifierSymbolInfo = (IMethodSymbol)context.SemanticModel.GetSymbolInfo(invokedMethod).Symbol;
+
                             //Check for Valid Events
                             ValidEvents validEvents = analyzer.AnalyzeMemAccessExprSyntax(invokedMethod, cryptoMethods, methods, _cryslSpecificationModel, context, identifierSymbolInfo, node.Span, invocatorType);
 
-                            //Check for Valid Order
-                            IOrderSectionAnalyzer orderSectionAnalyzer = _serviceProvider.GetService<IOrderSectionAnalyzer>();
-                            bool isOrderValid = orderSectionAnalyzer.IsValidOrder(validEvents, context.ContainingSymbol.ToString(), EventsOrderDict, EventOrderContraint);
-
-                            //Report If Order Constraint is Violated
-                            if (!isOrderValid)
-                            {
-                                //Report Diagnostics Order Violation
-                            }
-
-                            //If Event is Valid then Check Constraints
                             if (validEvents.IsValidEvent)
                             {
-                                //Check for Valid Constraints
-                                foreach (var parameter in validEvents.ValidEventsDict)
+                                //Check only if Aggregators are present
+                                if (methods.Aggregator != null)
                                 {
+                                    //Add valid events to Events and Order Dictionary
+                                    AddEventsToDictionary(methods.Aggregator.Aggregator_Name, validEvents);
+
+                                    bool isAggConditionSatisfied = commonUtilities.CheckAggregator(ValidEventsDictionary, methods.Aggregator.Aggregators);
+                                    if (!isAggConditionSatisfied)
+                                    {
+                                        //Report violation of aggregation condition
+                                    }
+                                }
+                                //Add single event to dictionary if aggregator not present.
+                                else
+                                {
+                                    AddEventsToDictionary(validEvents.PropertyName, validEvents);
+                                }
+
+                                //Iterate throigh parameters if present and check for constraints only if arguments are present
+                                if (validEvents.ValidMethods.Parameters.Count > 0)
+                                {
+                                    //Check for valid constraints
                                     IConstraintsSectionAnalyzer constraintsSectionAnalyzer = _serviceProvider.GetService<IConstraintsSectionAnalyzer>();
                                     List<ConstraintsModel> satisfiedConstraintsList = new List<ConstraintsModel>();
-                                    foreach (var parameterValue in parameter.Value)
-                                    {
-                                        //Check for constraints only if arguments are present
-                                        if (parameterValue.Parameters.Count != 0)
-                                        {
-                                            satisfiedConstraintsList = constraintsSectionAnalyzer.AnalyzeParameters(argumentsList, parameterValue.Parameters, _cryslSpecificationModel.Constraints_Section.Constraints);
-                                            ReportConstraintsSection(context, satisfiedConstraintsList);
-                                            AddConstraints additionalConstraints = new AddConstraints
-                                            {
-                                                EventKey = parameter.Key,
-                                                EventVariableDeclarator = invokedMethod.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>().First().Identifier.Text,
-                                                ConstraintsModels = satisfiedConstraintsList
-                                            };
-                                            AdditionalConstraintsDict.Add(identifierSymbolInfo.ReturnType.ToString(), additionalConstraints);
-                                        }
-                                    }
 
+                                    satisfiedConstraintsList = constraintsSectionAnalyzer.AnalyzeParameters(argumentsList, validEvents.ValidMethods.Parameters, _cryslSpecificationModel.Constraints_Section.Constraints);
+                                    ReportConstraintsSection(context, satisfiedConstraintsList);
+
+                                    AddConstraints additionalConstraintsCheck = new AddConstraints();
+                                    AdditionalConstraintsDict.TryGetValue(identifierSymbolInfo.ReturnType.ToString(), out additionalConstraintsCheck);
+
+                                    //Add only if the key is not present in the additional constraints dictionary
+                                    if (additionalConstraintsCheck == null)
+                                    {
+                                        AddConstraints additionalConstraints = new AddConstraints
+                                        {
+                                            EventKey = validEvents.PropertyName,
+                                            EventVariableDeclarator = invokedMethod.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>().First().Identifier.Text,
+                                            ConstraintsModels = satisfiedConstraintsList
+                                        };
+                                        AdditionalConstraintsDict.Add(identifierSymbolInfo.ReturnType.ToString(), additionalConstraints);
+                                    }
                                 }
 
                             }
                             else
                             {
-                                //Report context to diagnostics as invalid event
-                            }
+                                //Report not a valid event
+                            }                           
                         }
                     }
                 }
             }
-        }
+        }       
 
         /// <summary>
         /// Analyze Assignment Expression Nodes
@@ -215,13 +238,8 @@ namespace CodeSharpenerCryptoAnalyzer
                                     var validEvents = analyzer.AnalyzeAssignmentExprSyntax(cryptoMethods, _cryslSpecificationModel, context, leftExprSymbolInfo);
                                     isValidEvent = validEvents.IsValidEvent;
 
-                                    //Check for Valid Order
-                                    IOrderSectionAnalyzer orderSectionAnalyzer = _serviceProvider.GetService<IOrderSectionAnalyzer>();
-                                    bool isOrderValid = orderSectionAnalyzer.IsValidOrder(validEvents, context.ContainingSymbol.ToString(), EventsOrderDict, EventOrderContraint);
-                                    if (!isOrderValid)
-                                    {
-                                        //Report Diagnsotics as Violation of Order Constraint
-                                    }
+                                    //Add valid events to Events and Order Dictionary
+                                    AddEventsToDictionary(validEvents.AggregatorName, validEvents);                                    
 
                                     string rightExprValue = string.Empty;
                                     if (simpleAssignExpr.Right.Kind().Equals(SyntaxKind.NumericLiteralExpression))
@@ -273,6 +291,31 @@ namespace CodeSharpenerCryptoAnalyzer
         }
 
         /// <summary>
+        /// Register CompilationEndAction
+        /// </summary>
+        /// <param name="context"></param>
+        private static void AnalyzeCompilationStartAction(CompilationStartAnalysisContext context)
+        {
+            context.RegisterCompilationEndAction(AnalyzeEventOrderAction);
+
+        }
+
+        /// <summary>
+        /// Check if the Event Order Constraint is Satified
+        /// </summary>
+        /// <param name="context"></param>
+        private static void AnalyzeEventOrderAction(CompilationAnalysisContext context)
+        {
+            var orderCheckConstraint = _serviceProvider.GetService<IOrderSectionAnalyzer>();
+            var isValidOrder = orderCheckConstraint.IsValidOrder(EventsOrderDictionary, EventOrderContraint);
+            if(!isValidOrder)
+            {
+                //Report violation of order constraint
+            }
+
+        }
+
+        /// <summary>
         /// Report if Constraints are not satisfied
         /// </summary>
         /// <param name="context"></param>
@@ -285,6 +328,63 @@ namespace CodeSharpenerCryptoAnalyzer
                 {
                     //Report Diagnostics as constraints not satisfied
                 }
+            }
+        }
+
+        /// <summary>
+        /// Add Valid Events to Events Dictionary and Order Dictionary
+        /// </summary>
+        /// <param name="aggregatorName"></param>
+        /// <param name="validEvents"></param>
+        private static void AddEventsToDictionary(string aggregatorName, ValidEvents validEvents)
+        {
+            //Check only if Aggregators are present            
+            //For instance it could be "Create" in Aes Crysl specification
+            var aggregatorEvents = EventsOrderDictionary.Where(x => x.Key.ToString().Contains(aggregatorName)).Select(y => y).FirstOrDefault();
+
+            //If the Event is not present
+            if (aggregatorEvents.Value != null)
+            {
+                List<MethodSignatureModel> validMethodSignatures = new List<MethodSignatureModel>();                
+                ValidEventsDictionary.TryGetValue(validEvents.PropertyName, out validMethodSignatures);
+
+                //If ValidEventsDictionary contains the method but with different signature, update the dictionary
+                if (validMethodSignatures != null)
+                {
+                    validMethodSignatures.Add(validEvents.ValidMethods);
+                    ValidEventsDictionary[validEvents.PropertyName] = validMethodSignatures;
+
+                }
+                else
+                {
+                    List<MethodSignatureModel> methodSignatureList = new List<MethodSignatureModel>();
+                    methodSignatureList.Add(validEvents.ValidMethods);                    
+                    ValidEventsDictionary.Add(validEvents.PropertyName, methodSignatureList);
+                }
+                //Updating the value because the key is already present        
+                EventsOrderDictionary[aggregatorName] = ValidEventsDictionary;
+
+
+            }
+            else
+            {
+                List<MethodSignatureModel> validMethodSignatures = new List<MethodSignatureModel>();
+                ValidEventsDictionary.TryGetValue(validEvents.PropertyName, out validMethodSignatures);
+
+                //If ValidEventsDictionary contains the method but with different signature, update the dictionary
+                if (validMethodSignatures != null)
+                {
+                    validMethodSignatures.Add(validEvents.ValidMethods);
+                    ValidEventsDictionary[validEvents.PropertyName] = validMethodSignatures;
+
+                }
+                else
+                {
+                    List<MethodSignatureModel> methodSignatureList = new List<MethodSignatureModel>();
+                    methodSignatureList.Add(validEvents.ValidMethods);
+                    ValidEventsDictionary.Add(validEvents.PropertyName, methodSignatureList);
+                }
+                EventsOrderDictionary.Add(aggregatorName, ValidEventsDictionary);
             }
         }
     }
