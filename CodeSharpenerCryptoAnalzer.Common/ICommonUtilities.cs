@@ -16,10 +16,12 @@ namespace CodeSharpenerCryptoAnalzer.Common
 
         bool CheckAggregator(Dictionary<string, List<MethodSignatureModel>> methodSignatureModels, ICollection<Aggregators> aggregators);
 
-        List<string> GetEventOrderList(CryslJsonModel cryslModel);
+        List<KeyValuePair<string, string>> GetEventOrderList(CryslJsonModel cryslModel);
 
         Regex ListToRegex(IEnumerable<string> list);
 
         string GetInvocatorType(ISymbol invocatorSymbol);
+
+        StringBuilder GetValidMethodSignatures(Methods methods);
     }
 }

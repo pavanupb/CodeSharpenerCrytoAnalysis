@@ -117,16 +117,43 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="AnalyzerDescription" xml:space="preserve">
-    <value>Type names should be all uppercase.</value>
-    <comment>An optional longer localizable description of the diagnostic.</comment>
+  <data name="ConstraintAnalyzerDescription" xml:space="preserve">
+    <value>The Method Parameters Specified are Invalid</value>
   </data>
-  <data name="AnalyzerMessageFormat" xml:space="preserve">
-    <value>Type name '{0}' contains lowercase letters</value>
+  <data name="ConstraintAnalyzerMessageFormat" xml:space="preserve">
+    <value>The Value '{0}' is Invalid. Valid Values are '{1}'</value>
+  </data>
+  <data name="ConstraintAnalyzerTitle" xml:space="preserve">
+    <value>Invalid Method Parameter</value>
+  </data>
+  <data name="EventAggAnalyzerDescription" xml:space="preserve">
+    <value>Event Aggregation Condition not Satisfied</value>
+  </data>
+  <data name="EventAggAnalyzerMessageFormat" xml:space="preserve">
+    <value>Event '{0}' does not Satisfy Aggregation Condition</value>
+  </data>
+  <data name="EventAggAnalyzerTitle" xml:space="preserve">
+    <value>Event Aggregation Condition Violation</value>
+  </data>
+  <data name="EventAnalyzerDescription" xml:space="preserve">
+    <value>Not a Valid Event Signature</value>
+    <comment>The Event Signature is Invalid</comment>
+  </data>
+  <data name="EventAnalyzerMessageFormat" xml:space="preserve">
+    <value>Method '{0}' is Invalid. Valid Method Signatures(s) are '{1}'</value>
     <comment>The format-able message the diagnostic displays.</comment>
   </data>
-  <data name="AnalyzerTitle" xml:space="preserve">
-    <value>Type name contains lowercase letters</value>
+  <data name="EventAnalyzerTitle" xml:space="preserve">
+    <value>Event Constraint Violation</value>
     <comment>The title of the diagnostic.</comment>
+  </data>
+  <data name="OrderAnalyzerDescription" xml:space="preserve">
+    <value>The Events are Invoked in not a Valid Order</value>
+  </data>
+  <data name="OrderAnalyzerMessageFormat" xml:space="preserve">
+    <value>The '{0}' Events are Invoked in an Incorrect Order. Valid Order of Invocation is '{1}'</value>
+  </data>
+  <data name="OrderAnalyzerTitle" xml:space="preserve">
+    <value>Invalid Events Order</value>
   </data>
 </root>

@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace CodeSharpenerCryptoAnalzer.Common
@@ -20,27 +21,30 @@ namespace CodeSharpenerCryptoAnalzer.Common
         public bool IsMethodInEvents(CryptoSignature cryptoMethod, IMethodSymbol methodSymbol, ICollection<ObjectsDeclaration> objectsDeclarations)
         {
             bool isMethodInEvents = false;
-            if (cryptoMethod.Method_Name.Equals(methodSymbol.Name) && !cryptoMethod.Is_property)
+            if (methodSymbol != null)
             {
-                if (cryptoMethod.Argument_types.Count == methodSymbol.Parameters.Length)
+                if (cryptoMethod.Method_Name.Equals(methodSymbol.Name) && !cryptoMethod.Is_property)
                 {
-                    bool isValidArgument = false;
-                    if (cryptoMethod.Argument_types.Count > 0)
+                    if (cryptoMethod.Argument_types.Count == methodSymbol.Parameters.Length)
                     {
-                        var argumentsArray = cryptoMethod.Argument_types.ToArray();
-                        for (int i = 0; i < cryptoMethod.Argument_types.Count; i++)
+                        bool isValidArgument = false;
+                        if (cryptoMethod.Argument_types.Count > 0)
                         {
-                            isValidArgument = IsArgumentValid(argumentsArray[i], methodSymbol.Parameters[i], objectsDeclarations);
-                            if (!isValidArgument)
+                            var argumentsArray = cryptoMethod.Argument_types.ToArray();
+                            for (int i = 0; i < cryptoMethod.Argument_types.Count; i++)
                             {
-                                return false;
+                                isValidArgument = IsArgumentValid(argumentsArray[i], methodSymbol.Parameters[i], objectsDeclarations);
+                                if (!isValidArgument)
+                                {
+                                    return false;
+                                }
                             }
+                            isMethodInEvents = true;
                         }
-                        isMethodInEvents = true;
-                    }
-                    else
-                    {
-                        isMethodInEvents = true;
+                        else
+                        {
+                            isMethodInEvents = true;
+                        }
                     }
                 }
             }
@@ -54,19 +58,23 @@ namespace CodeSharpenerCryptoAnalzer.Common
         /// <returns></returns>
         public string GetInvocatorType(ISymbol invocatorSymbol)
         {
-            SymbolKind symbolKind = invocatorSymbol.Kind;
-            switch (symbolKind)
+            if (invocatorSymbol != null)
             {
-                case SymbolKind.NamedType:
-                    var nameTypeSymbol = (INamedTypeSymbol)invocatorSymbol;
-                    return nameTypeSymbol.ToString();
+                SymbolKind symbolKind = invocatorSymbol.Kind;
+                switch (symbolKind)
+                {
+                    case SymbolKind.NamedType:
+                        var nameTypeSymbol = (INamedTypeSymbol)invocatorSymbol;
+                        return nameTypeSymbol.ToString();
 
-                case SymbolKind.Local:
-                    var localSymbol = (ILocalSymbol)invocatorSymbol;
-                    return localSymbol.Type.ToString();
+                    case SymbolKind.Local:
+                        var localSymbol = (ILocalSymbol)invocatorSymbol;
+                        return localSymbol.Type.ToString();
 
-                default: return invocatorSymbol.ToString();
+                    default: return invocatorSymbol.ToString();
+                }
             }
+            return string.Empty;
 
         }
 
@@ -129,15 +137,66 @@ namespace CodeSharpenerCryptoAnalzer.Common
         /// </summary>
         /// <param name="cryslModel"></param>
         /// <returns></returns>
-        public List<string> GetEventOrderList(CryslJsonModel cryslModel)
+        public List<KeyValuePair<string, string>> GetEventOrderList(CryslJsonModel cryslModel)
         {
-            List<string> eventOrderList = new List<string>();
+            List<KeyValuePair<string, string>> eventOrderList = new List<KeyValuePair<string, string>>();
             foreach (var order in cryslModel.Order_Section.Event_Order)
             {
-                string regex = string.IsNullOrEmpty(order.Regex) ? string.Empty : order.Regex;
-                eventOrderList.Add($"{order.Aggregates}{regex}");
+                string regex = string.IsNullOrEmpty(order.Regex) ? string.Empty : order.Regex;             
+
+                string methodName = string.Empty;
+                foreach(var methods in cryslModel.Event_Section.Methods)
+                {
+                    if(methods.Aggregator != null)
+                    {
+                       if(methods.Aggregator.Aggregator_Name.Equals(order.Aggregates))
+                        {
+                            methodName = methods.Crypto_Signature.FirstOrDefault().Method_Name;
+                            break;
+                        }
+                    }
+                    else if(methods.Crypto_Signature.FirstOrDefault().Event_Var_Name.Equals(order.Aggregates))
+                    {
+                        methodName = methods.Crypto_Signature.FirstOrDefault().Method_Name;
+                        break;
+                    }
+                }
+                eventOrderList.Add(new KeyValuePair<string, string>($"{order.Aggregates}{regex}", methodName));
+
             }
             return eventOrderList;
+        }
+
+        /// <summary>
+        /// Builds a String of Valid Parameters.
+        /// </summary>
+        /// <param name="methods"></param>
+        /// <returns>Valid Method Signatures that can be used for Diagnsotics Message</returns>
+        public StringBuilder GetValidMethodSignatures(Methods methods)
+        {
+            StringBuilder methodSigBuilder = new StringBuilder();
+            var lastItem = methods.Crypto_Signature.Last();
+            foreach (var method in methods.Crypto_Signature)
+            {
+                methodSigBuilder.Append(method.Method_Name);
+                if (method.Argument_types.Count() != 0)
+                {
+                    methodSigBuilder.Append("(");
+                    var methodParameters = string.Join(", ", method.Argument_types.Select(x => x.Argument));
+                    methodSigBuilder.Append(methodParameters);
+                    methodSigBuilder.Append(")");
+                }
+                else
+                {
+                    methodSigBuilder.Append("( )");
+                }
+
+                if (!method.Equals(lastItem))
+                {
+                    methodSigBuilder.Append(", ");
+                }
+            }
+            return methodSigBuilder;
         }
 
         /// <summary>
@@ -231,6 +290,6 @@ namespace CodeSharpenerCryptoAnalzer.Common
                 .Where(y => y.Var_name.Equals(variableDeclaration)).FirstOrDefault();
 
             return objectType.Object_type;
-        }
+        }        
     }
 }

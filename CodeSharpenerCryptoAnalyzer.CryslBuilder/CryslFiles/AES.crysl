@@ -20,14 +20,16 @@ EVENTS
 	s3: blockSize = BlockSize;
 
 	CreateEncryptor: cryptoTransform = CreateEncryptor(key, IV);
+
+	CreateDecryptor: cryptoTransform = CreateDecryptor(key, IV);
 	
 	
 ORDER
-	Create, s1?, s2?, s3?, CreateEncryptor
+	Create, s1?, s2?, s3?, CreateEncryptor?, CreateDecryptor?
 
 CONSTRAINTS
 		algorithm in {"AES", "AesCryptoServiceProvider", "System.Security.Cryptography.AesCryptoServiceProvider", "AesManaged", "System.Security.Cryptography.AesManaged"};
-		algorithm in {"AES"} => keySize in {128, 256};
+		keySize in {128, 256};
 		algorithm in {"AES"} => cipherMode in {"ECB"};
 		algorithm in {"AES"} => blockSize in {128};
 		

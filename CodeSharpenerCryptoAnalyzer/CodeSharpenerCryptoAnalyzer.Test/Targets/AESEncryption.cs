@@ -10,7 +10,7 @@ namespace CodeSharpenerCryptoAnalysis.Test
             string dataToEncrypt = "Test Data to Encrypt";
             byte[] encryptedValue;
 
-            using (Aes aesEncryption = Aes.Create("AES"))
+            using (Aes aesEncryption = Aes.Create("DES"))
             {
                 Aes aesEncryption1 = Aes.Create();
                 aesEncryption.KeySize = 256;

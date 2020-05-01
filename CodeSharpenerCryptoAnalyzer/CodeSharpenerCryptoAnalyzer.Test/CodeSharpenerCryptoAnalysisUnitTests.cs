@@ -20,17 +20,17 @@ namespace CodeSharpenerCryptoAnalysis.Test
         public void AESEncryptionWithoutParameters()
         {
             var path = "..//..//..//Targets//AESEncryption.cs";
-            var test = System.IO.File.ReadAllText(path);            
+            var test = System.IO.File.ReadAllText(path); 
 
             VerifyCSharpDiagnostic(test);
 
             Console.WriteLine("Test");       
         }
 
-        protected override CodeFixProvider GetCSharpCodeFixProvider()
+        /*protected override CodeFixProvider GetCSharpCodeFixProvider()
         {
             return new CodeSharpenerCryptoAnalyzerCodeFixProvider();
-        }
+        }*/
 
         protected override DiagnosticAnalyzer GetCSharpDiagnosticAnalyzer()
         {

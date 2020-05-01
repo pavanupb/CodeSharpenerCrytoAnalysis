@@ -52,38 +52,41 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
             foreach (var constraints in additionalConstraints.ConstraintsModels)
             {
                 //Iterate through each additional constraints
-                foreach (var constraint in constraints.AdditionalConstraints)
+                if (constraints.AdditionalConstraints != null)
                 {
-                    if (leftExprSymbolInfo.Kind.Equals(SymbolKind.Property))
+                    foreach (var constraint in constraints.AdditionalConstraints)
                     {
-                        IPropertySymbol leftExprPropertyInfo = (IPropertySymbol)leftExprSymbolInfo;
-                        var objectTypes = objectsDeclarations.Select(x => x).Where(y => y.Object_type.ToString().Equals(leftExprPropertyInfo.Type.ToString()) && y.Var_name.ToString().Equals(validEvents.PropertyName));                       
-                        // Iterate through all the matched object declarations
-                        foreach (var objectType in objectTypes)
+                        if (leftExprSymbolInfo.Kind.Equals(SymbolKind.Property))
                         {
-                            if (constraint.Object_Varname_Additional_Constraint.ToString().Equals(objectType.Var_name.ToString()))
+                            IPropertySymbol leftExprPropertyInfo = (IPropertySymbol)leftExprSymbolInfo;
+                            var objectTypes = objectsDeclarations.Select(x => x).Where(y => y.Object_type.ToString().Equals(leftExprPropertyInfo.Type.ToString()) && y.Var_name.ToString().Equals(validEvents.PropertyName));
+                            // Iterate through all the matched object declarations
+                            foreach (var objectType in objectTypes)
                             {
-                                bool isAddConstraintSatisfied = false;
-                                foreach (var addConstraint in constraint.Additional_Constraints_List)
+                                if (constraint.Object_Varname_Additional_Constraint.ToString().Equals(objectType.Var_name.ToString()))
                                 {
-                                    //The Right Expression Node Value Should be according to the value in the Constraint
-                                    if (addConstraint.ToString().Equals(rightExprValue))
+                                    bool isAddConstraintSatisfied = false;
+                                    foreach (var addConstraint in constraint.Additional_Constraints_List)
                                     {
-                                        isAddConstraintSatisfied = true;
+                                        //The Right Expression Node Value Should be according to the value in the Constraint
+                                        if (addConstraint.ToString().Equals(rightExprValue))
+                                        {
+                                            isAddConstraintSatisfied = true;
+                                        }
+
+                                    }
+                                    if (!isAddConstraintSatisfied)
+                                    {
+                                        isAdditionalConstraintSatisfied = false;
+                                        return isAdditionalConstraintSatisfied;
                                     }
 
                                 }
-                                if (!isAddConstraintSatisfied)
-                                {
-                                    isAdditionalConstraintSatisfied = false;
-                                    return isAdditionalConstraintSatisfied;
-                                }
 
                             }
-
                         }
-                    }
 
+                    }
                 }
 
             }
@@ -144,6 +147,7 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
                 else
                 {
                     constraintsModel.IsConstraintSatisfied = false;
+                    constraintsModel.NotSatisfiedParameter = literalExpression.Token.Value.ToString();
                     return constraintsModel;
                 }                
             }

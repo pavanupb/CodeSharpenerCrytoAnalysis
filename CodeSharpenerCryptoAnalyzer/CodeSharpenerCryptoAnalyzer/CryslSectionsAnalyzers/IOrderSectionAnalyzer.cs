@@ -8,6 +8,6 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
 {
     public interface IOrderSectionAnalyzer
     {
-        bool IsValidOrder(Dictionary<string, Dictionary<string, List<MethodSignatureModel>>> currentEventOrderDict, List<string> eventOrderConstraint);
+        bool IsValidOrder(Dictionary<string, string> currentEventOrderDict, List<string> eventOrderConstraint);
     }
 }
