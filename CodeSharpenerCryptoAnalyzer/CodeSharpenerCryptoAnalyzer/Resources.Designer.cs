@@ -142,6 +142,33 @@ namespace CodeSharpenerCryptoAnalyzer {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Hard-Coded Key and IV value could lead to Security Vulnerability.
+        /// </summary>
+        internal static string HardCodedDescription {
+            get {
+                return ResourceManager.GetString("HardCodedDescription", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The Key and IV value should not be hardcoded.
+        /// </summary>
+        internal static string HardCodedKeysTitle {
+            get {
+                return ResourceManager.GetString("HardCodedKeysTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Hard-Coded Key and IV value could lead to Security Vulnerability.
+        /// </summary>
+        internal static string HardCodedMessageFormat {
+            get {
+                return ResourceManager.GetString("HardCodedMessageFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to The Events are Invoked in not a Valid Order.
         /// </summary>
         internal static string OrderAnalyzerDescription {

@@ -29,9 +29,9 @@ ORDER
 
 CONSTRAINTS
 		algorithm in {"AES", "AesCryptoServiceProvider", "System.Security.Cryptography.AesCryptoServiceProvider", "AesManaged", "System.Security.Cryptography.AesManaged"};
-		keySize in {128, 256};
-		algorithm in {"AES"} => cipherMode in {"ECB"};
-		algorithm in {"AES"} => blockSize in {128};
+		algorithm in {"AES"} => keySize in {256};
+		cipherMode in {"ECB"};
+		blockSize in {128};
 		
 ENSURES
 	generatedKey[key, IV, algorithm];

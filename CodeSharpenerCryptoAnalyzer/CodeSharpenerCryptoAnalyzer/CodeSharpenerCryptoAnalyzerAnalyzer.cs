@@ -8,6 +8,7 @@ using CodeSharpenerCryptoAnalysis.AnalyzerModels;
 using CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers;
 using CodeSharpenerCryptoAnalysis.Models;
 using CodeSharpenerCryptoAnalyzer.CryslBuilder;
+using CodeSharpenerCryptoAnalyzer.Visitors;
 using CodeSharpenerCryptoAnalzer.Common;
 using CryslCSharpObjectBuilder.Models.CSharpModels;
 using CryslData;
@@ -49,7 +50,14 @@ namespace CodeSharpenerCryptoAnalyzer
         private static readonly LocalizableString OrderAnalyzerDescription = new LocalizableResourceString(nameof(Resources.OrderAnalyzerDescription), Resources.ResourceManager, typeof(Resources));
         private const string OrderAnalyzerCategory = "Violation";
         private static DiagnosticDescriptor OrderAnalyzerViolationRule = new DiagnosticDescriptor(OrderDiagnosticId, OrderAnalyzerTitle, OrderAnalyzerMessageFormat, OrderAnalyzerCategory, DiagnosticSeverity.Warning, isEnabledByDefault: true, description: OrderAnalyzerDescription);
-        public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get { return ImmutableArray.Create(EventViolationRule, EventAggViolationRule, ConstraintAnalyzerViolationRule, OrderAnalyzerViolationRule); } }
+
+        public const string HardCodedCheckDiagnosticId = "HardCodedKey";
+        private static readonly LocalizableString HardCodedCheckTitle = new LocalizableResourceString(nameof(Resources.HardCodedKeysTitle), Resources.ResourceManager, typeof(Resources));
+        private static readonly LocalizableString HardCodedCheckMessageFormat = new LocalizableResourceString(nameof(Resources.HardCodedMessageFormat), Resources.ResourceManager, typeof(Resources));
+        private static readonly LocalizableString HardCodedCheckDescription = new LocalizableResourceString(nameof(Resources.HardCodedDescription), Resources.ResourceManager, typeof(Resources));
+        private const string HardCodedCheckCategory = "Violation";
+        private static DiagnosticDescriptor HardCodedCheckViolationRule = new DiagnosticDescriptor(HardCodedCheckDiagnosticId, HardCodedCheckTitle, HardCodedCheckMessageFormat, HardCodedCheckCategory, DiagnosticSeverity.Warning, isEnabledByDefault: true, description: HardCodedCheckDescription);
+        public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get { return ImmutableArray.Create(EventViolationRule, EventAggViolationRule, ConstraintAnalyzerViolationRule, OrderAnalyzerViolationRule, HardCodedCheckViolationRule); } }
 
 
 
@@ -62,6 +70,8 @@ namespace CodeSharpenerCryptoAnalyzer
         private static List<KeyValuePair<string, string>> EventsOrderDict;
 
         private static List<KeyValuePair<string, string>> EventOrderContraint;
+
+        private static List<ISymbol> TaintedVariables;
 
         //Events Related Dictionary
         //Key: Event_Var_Name
@@ -100,6 +110,7 @@ namespace CodeSharpenerCryptoAnalyzer
             context.RegisterSyntaxNodeAction(AnalyzeMethodInvocationNode, SyntaxKind.InvocationExpression);
             context.RegisterSyntaxNodeAction(AnalyzeSimpleAssignmentExpression, SyntaxKind.SimpleAssignmentExpression);
             context.RegisterCodeBlockStartAction<SyntaxKind>(AnalyzeCodeBlockAction);
+            context.RegisterSyntaxNodeAction(AnalyzeLocalDeclarationStatement, SyntaxKind.LocalDeclarationStatement);
 
             //All global assignements to analyzer goes below
             _cryslSpecificationModel = cryslCompilationModel;
@@ -107,6 +118,7 @@ namespace CodeSharpenerCryptoAnalyzer
             EventsOrderDict = new List<KeyValuePair<string, string>>();
             ValidEventsDictionary = new Dictionary<string, List<MethodSignatureModel>>();
             EventsOrderDictionary = new Dictionary<string, string>();
+            TaintedVariables = new List<ISymbol>();
             var commonUtilities = _serviceProvider.GetService<ICommonUtilities>();
             EventOrderContraint = commonUtilities.GetEventOrderList(_cryslSpecificationModel);
 
@@ -127,6 +139,42 @@ namespace CodeSharpenerCryptoAnalyzer
                 context.ReportDiagnostic(diagnostic);
             }
         }*/
+
+        /// <summary>
+        /// Report HardCoded Byte Array Values
+        /// </summary>
+        /// <param name="context"></param>
+        private void AnalyzeLocalDeclarationStatement(SyntaxNodeAnalysisContext context)
+        {
+            var localDeclarationStatement = (LocalDeclarationStatementSyntax)context.Node;
+            LocalDeclarationStatementVisitor localDeclarationStatementVisitor = new LocalDeclarationStatementVisitor();
+            localDeclarationStatementVisitor.Visit(localDeclarationStatement);
+            var isArrayInitializerPresent = localDeclarationStatementVisitor.GetResult();
+            if(isArrayInitializerPresent.IsArrayInitializer)
+            {
+                var nodeSymbolInfo = context.SemanticModel.GetDeclaredSymbol(isArrayInitializerPresent.DeclaratorSyntax);
+                var dataFlowAnalysisResult = context.SemanticModel.AnalyzeDataFlow(localDeclarationStatement);
+                if(dataFlowAnalysisResult.ReadOutside.Contains(nodeSymbolInfo))
+                {
+                    var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
+                    context.ReportDiagnostic(diagnsotics);
+                }
+            }
+            /*var variableDeclarationNode = localDeclarationStatement.ChildNodes().OfType<VariableDeclarationSyntax>().FirstOrDefault().ChildNodes().OfType<VariableDeclaratorSyntax>().FirstOrDefault();
+            var nodeSymbolInfo = context.SemanticModel.GetDeclaredSymbol(variableDeclarationNode) as ILocalSymbol;
+            if(nodeSymbolInfo != null)
+            {
+                if(nodeSymbolInfo.Type.ToString().Equals("byte[]"))
+                {
+                    var dataFlowAnalysisResult = context.SemanticModel.AnalyzeDataFlow(localDeclarationStatement);
+                    if(dataFlowAnalysisResult.ReadOutside.Contains(nodeSymbolInfo))
+                    {
+                        //Report Diagnsotics
+                    }
+                }
+            }*/
+            
+        }
 
         /// <summary>
         /// Analyze Method Invocation Nodes
@@ -380,7 +428,7 @@ namespace CodeSharpenerCryptoAnalyzer
             //EventsOrderDictionary.Clear();
             context.RegisterCodeBlockEndAction(AnalyzeCodeBLockEndAction);
 
-        }
+        }        
 
         private void AnalyzeCodeBLockEndAction(CodeBlockAnalysisContext context)
         {

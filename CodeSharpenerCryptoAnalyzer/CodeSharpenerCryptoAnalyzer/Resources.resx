@@ -147,6 +147,15 @@
     <value>Event Constraint Violation</value>
     <comment>The title of the diagnostic.</comment>
   </data>
+  <data name="HardCodedDescription" xml:space="preserve">
+    <value>Hard-Coded Key and IV value could lead to Security Vulnerability</value>
+  </data>
+  <data name="HardCodedKeysTitle" xml:space="preserve">
+    <value>The Key and IV value should not be hardcoded</value>
+  </data>
+  <data name="HardCodedMessageFormat" xml:space="preserve">
+    <value>Hard-Coded Key and IV value could lead to Security Vulnerability</value>
+  </data>
   <data name="OrderAnalyzerDescription" xml:space="preserve">
     <value>The Events are Invoked in not a Valid Order</value>
   </data>
