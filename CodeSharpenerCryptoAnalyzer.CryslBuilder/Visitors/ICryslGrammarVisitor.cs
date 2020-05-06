@@ -171,6 +171,27 @@ public interface ICryslGrammarVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitTypeValue([NotNull] CryslGrammarParser.TypeValueContext context);
 	/// <summary>
+	/// Visit a parse tree produced by the <c>ByteArrayValue</c>
+	/// labeled alternative in <see cref="CryslGrammarParser.objectlist"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitByteArrayValue([NotNull] CryslGrammarParser.ByteArrayValueContext context);
+	/// <summary>
+	/// Visit a parse tree produced by the <c>SbyteArrayValue</c>
+	/// labeled alternative in <see cref="CryslGrammarParser.objectlist"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSbyteArrayValue([NotNull] CryslGrammarParser.SbyteArrayValueContext context);
+	/// <summary>
+	/// Visit a parse tree produced by the <c>CharArrayValue</c>
+	/// labeled alternative in <see cref="CryslGrammarParser.objectlist"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitCharArrayValue([NotNull] CryslGrammarParser.CharArrayValueContext context);
+	/// <summary>
 	/// Visit a parse tree produced by <see cref="CryslGrammarParser.eventlist"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
@@ -217,6 +238,20 @@ public interface ICryslGrammarVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
 	Result VisitSngEventWithArgumentsUnscore([NotNull] CryslGrammarParser.SngEventWithArgumentsUnscoreContext context);
+	/// <summary>
+	/// Visit a parse tree produced by the <c>SngEventMethodWithArguments</c>
+	/// labeled alternative in <see cref="CryslGrammarParser.sngevent"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSngEventMethodWithArguments([NotNull] CryslGrammarParser.SngEventMethodWithArgumentsContext context);
+	/// <summary>
+	/// Visit a parse tree produced by the <c>SngEventMethodWithoutArguments</c>
+	/// labeled alternative in <see cref="CryslGrammarParser.sngevent"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSngEventMethodWithoutArguments([NotNull] CryslGrammarParser.SngEventMethodWithoutArgumentsContext context);
 	/// <summary>
 	/// Visit a parse tree produced by the <c>WithArguments</c>
 	/// labeled alternative in <see cref="CryslGrammarParser.event"/>.

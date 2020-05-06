@@ -65,16 +65,11 @@ namespace CodeSharpenerCryptoAnalyzer
 
 
         private static CryslJsonModel _cryslSpecificationModel;
-
         private static ServiceProvider _serviceProvider { get; set; }
 
         private static Dictionary<string, List<AddConstraints>> AdditionalConstraintsDict;
 
-        private static List<KeyValuePair<string, string>> EventsOrderDict;
-
-        private static List<KeyValuePair<string, string>> EventOrderContraint;
-
-        private static List<ISymbol> TaintedSymbols;        
+        private static List<KeyValuePair<string, string>> EventOrderContraint;             
 
         //Events Related Dictionary
         //Key: Event_Var_Name
@@ -84,7 +79,7 @@ namespace CodeSharpenerCryptoAnalyzer
         //Dictionary of all analyzed events
         private static Dictionary<string, string> EventsOrderDictionary;
 
-        private static List<KeyValuePair<ISymbol, ISymbol>> TaintedValuesDictionary;
+        private static List<KeyValuePair<ISymbol, ISymbol>> TaintedValuesDictionary;        
 
         public override void Initialize(AnalysisContext context)
         {
@@ -115,22 +110,24 @@ namespace CodeSharpenerCryptoAnalyzer
             context.RegisterSyntaxNodeAction(AnalyzeMethodInvocationNode, SyntaxKind.InvocationExpression);
             context.RegisterSyntaxNodeAction(AnalyzeSimpleAssignmentExpression, SyntaxKind.SimpleAssignmentExpression);
             context.RegisterCodeBlockStartAction<SyntaxKind>(AnalyzeCodeBlockAction);
-            context.RegisterSyntaxNodeAction(AnalyzeLocalDeclarationStatement, SyntaxKind.LocalDeclarationStatement);            
+            context.RegisterSyntaxNodeAction(AnalyzeLocalDeclarationStatement, SyntaxKind.LocalDeclarationStatement);
+            context.RegisterOperationBlockStartAction(AnalyzeUsingStartBlock);
 
             //All global assignements to analyzer goes below
             _cryslSpecificationModel = cryslCompilationModel;
-            AdditionalConstraintsDict = new Dictionary<string, List<AddConstraints>>();
-            EventsOrderDict = new List<KeyValuePair<string, string>>();
+            AdditionalConstraintsDict = new Dictionary<string, List<AddConstraints>>();            
             ValidEventsDictionary = new Dictionary<string, List<MethodSignatureModel>>();
             EventsOrderDictionary = new Dictionary<string, string>();
-            TaintedSymbols = new List<ISymbol>();
             TaintedValuesDictionary = new List<KeyValuePair<ISymbol, ISymbol>>();
+            /*if (TaintedValuesDictionary == null)
+            {
+                TaintedValuesDictionary = new List<KeyValuePair<ISymbol, ISymbol>>();
+            }*/
+            
             var commonUtilities = _serviceProvider.GetService<ICommonUtilities>();
             EventOrderContraint = commonUtilities.GetEventOrderList(_cryslSpecificationModel);
 
         }
-
-        
 
         /*private static void AnalyzeSymbol(SymbolAnalysisContext context)
         {
@@ -160,17 +157,16 @@ namespace CodeSharpenerCryptoAnalyzer
             if(isArrayInitializerPresent.IsArrayInitializer)
             {
                 //Adding to Tainted Dictionary for all Byte ArrayInitializer Types
-                var nodeSymbolInfo = context.SemanticModel.GetDeclaredSymbol(isArrayInitializerPresent.DeclaratorSyntax);
+                var nodeSymbolInfo = context.SemanticModel.GetDeclaredSymbol(isArrayInitializerPresent.DeclaratorSyntax); 
                 if (!IsTaintedValueExists(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo))
                 {
                     TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo));
                 }
-                //TaintedSymbols.Add(nodeSymbolInfo);
                 var dataFlowAnalysisResult = context.SemanticModel.AnalyzeDataFlow(localDeclarationStatement);
                 if(dataFlowAnalysisResult.ReadOutside.Contains(nodeSymbolInfo))
                 {
                     var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
-                    context.ReportDiagnostic(diagnsotics);
+                    context.ReportDiagnostic(diagnsotics);                    
                 }
             }
         }        
@@ -185,7 +181,7 @@ namespace CodeSharpenerCryptoAnalyzer
             var invocationExpressionNode = context.Node;
             var memAcessExprNode = invocationExpressionNode.ChildNodes().OfType<MemberAccessExpressionSyntax>();
             var argumentsList = invocationExpressionNode.ChildNodes().OfType<ArgumentListSyntax>();
-            ICommonUtilities commonUtilities = _serviceProvider.GetService<ICommonUtilities>();
+            ICommonUtilities commonUtilities = _serviceProvider.GetService<ICommonUtilities>();          
 
             foreach (var node in memAcessExprNode)
             {
@@ -326,9 +322,9 @@ namespace CodeSharpenerCryptoAnalyzer
                                 context.ReportDiagnostic(diagnsotics);
                                 if(invExprSymbolInfo != null)
                                 {
-                                    if(!IsTaintedValueExists(invExprSymbolInfo.Parameters[i].ContainingSymbol, invExprSymbolInfo.Parameters[i]))
+                                    if(!IsTaintedValueExists(invExprSymbolInfo.ContainingSymbol, invExprSymbolInfo.Parameters[i]))
                                     {
-                                        TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(invExprSymbolInfo.Parameters[i].ContainingSymbol, invExprSymbolInfo.Parameters[i]));
+                                        TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(invExprSymbolInfo, invExprSymbolInfo.Parameters[i]));
                                     }
                                 }
                             }
@@ -345,7 +341,7 @@ namespace CodeSharpenerCryptoAnalyzer
         /// <param name="context"></param>
         private static void AnalyzeSimpleAssignmentExpression(SyntaxNodeAnalysisContext context)
         {            
-            var simpleAssExpr = context.Node;
+            var simpleAssExpr = context.Node;            
             if (simpleAssExpr.Kind().Equals(SyntaxKind.SimpleAssignmentExpression))
             {
                 var simpleAssignExpr = (AssignmentExpressionSyntax)simpleAssExpr;
@@ -379,7 +375,6 @@ namespace CodeSharpenerCryptoAnalyzer
                                             TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(context.ContainingSymbol, leftExprSymbolInfo));
                                             var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, simpleAssExpr.GetLocation());
                                             context.ReportDiagnostic(diagnsotics);
-
                                         }
                                     }
                                 }                               
@@ -461,13 +456,17 @@ namespace CodeSharpenerCryptoAnalyzer
                                     //Report Diagnostics as not a Valid Event
                                 }
                                 //Check if tainted variables are santized
+                                
                                 if(IsTaintedValueExists(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo))
                                 {
-                                    if(!IsTaintedValueExists(rightExprSymbolInfo.ContainingSymbol, rightExprSymbolInfo))
+                                    if (rightExprSymbolInfo != null)
                                     {
-                                        TaintedValuesDictionary.Remove(new KeyValuePair<ISymbol, ISymbol>(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo));
+                                        if (!IsTaintedValueExists(rightExprSymbolInfo.ContainingSymbol, rightExprSymbolInfo))
+                                        {
+                                            TaintedValuesDictionary.Remove(new KeyValuePair<ISymbol, ISymbol>(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo));
+                                        }
                                     }
-                                }                              
+                                }                             
                             }
                         }
                     }
@@ -479,13 +478,48 @@ namespace CodeSharpenerCryptoAnalyzer
         {
             foreach (var taintedValue in TaintedValuesDictionary)
             {
+                /*bool isTaintedValuePresent = false;
+                if(taintedValue.Key.Kind.Equals(SymbolKind.Method) && containingMethod.Kind.Equals(SymbolKind.Method))
+                {
+                    isTaintedValuePresent = IsMethodSignatureSame(taintedValue.Key as IMethodSymbol, containingMethod as IMethodSymbol);
+                }
+                else
+                {
+                    isTaintedValuePresent = (taintedValue.Key.Equals(containingMethod) && taintedValue.Value.Equals(nodeInfo)) ? true : false;
+                }*/
                 bool taintedValuePresent = (taintedValue.Key.Equals(containingMethod) && taintedValue.Value.Equals(nodeInfo)) ? true : false;
+                //bool taintedValueInContainingSymbol = (taintedValue.Key.Equals(containingMethod.ContainingSymbol) && taintedValue.Value.Equals(nodeInfo)) ? true : false;
                 if (taintedValuePresent)
                 {
                     return true;
                 }
             }
             return false;
+        }
+
+        private static bool IsMethodSignatureSame(IMethodSymbol taintedMethod, IMethodSymbol currentMethod)
+        {
+            if(taintedMethod.ContainingNamespace.Name.Equals(currentMethod.ContainingNamespace.Name) && taintedMethod.Name.Equals(currentMethod.Name) && taintedMethod.Parameters.Length.Equals(currentMethod.Parameters.Length))
+            {
+                for(int i = 0; i < currentMethod.Parameters.Length; i++)
+                {
+                    bool parameterMatch = false;
+                    if(taintedMethod.Parameters[i].Name.Equals(currentMethod.Parameters[i].Name) && taintedMethod.Parameters[i].Type.Name.Equals(currentMethod.Parameters[i].Type.Name))
+                    {
+                        parameterMatch = true;
+                    }
+                    if(!parameterMatch)
+                    {
+                        return false;
+                    }
+                }                
+            }
+            else
+            {
+                return false;
+            }
+
+            return true;
         }
 
 
@@ -512,9 +546,55 @@ namespace CodeSharpenerCryptoAnalyzer
             
         }*/
 
+        private void AnalyzeUsingStartBlock(OperationBlockStartAnalysisContext context)
+        {
+            context.RegisterOperationAction(AnalyzeUsingBlock, OperationKind.Using);
+        }
+
+        private void AnalyzeUsingBlock(OperationAnalysisContext context)
+        {
+            var operationSymbol = context.Operation as Microsoft.CodeAnalysis.Operations.IUsingOperation;
+            if(operationSymbol != null)
+            {
+                foreach(var local in operationSymbol.Locals)
+                {
+                    if(local.Type.ToString().Equals(_cryslSpecificationModel.Spec_Section.Class_Name))
+                    {
+                        foreach (var methods in _cryslSpecificationModel.Event_Section.Methods)
+                        {
+                            var cryptoMethods = methods.Crypto_Signature.Select(y => y).Where(x => x.Method_Name.ToString().Equals("Dispose"));
+                            if(cryptoMethods.Count() > 0)
+                            {
+                                
+                                MethodSignatureModel methodSignatureModel = new MethodSignatureModel
+                                {
+                                    MethodName = "Dispose"
+                                };
+                                
+                                List<MethodSignatureModel> methodSignatureModels = new List<MethodSignatureModel>();
+                                ValidEventsDictionary.TryGetValue(cryptoMethods.FirstOrDefault().Event_Var_Name, out methodSignatureModels);
+                                if (methodSignatureModels != null)
+                                {
+                                    methodSignatureModels.Add(methodSignatureModel);
+                                    ValidEventsDictionary[cryptoMethods.FirstOrDefault().Event_Var_Name] = methodSignatureModels;
+                                    EventsOrderDictionary[cryptoMethods.FirstOrDefault().Event_Var_Name] = cryptoMethods.FirstOrDefault().Method_Name;
+                                }
+                                else
+                                {
+                                    List<MethodSignatureModel> methodSignatureModelList = new List<MethodSignatureModel>();
+                                    methodSignatureModelList.Add(methodSignatureModel);
+                                    ValidEventsDictionary.Add(cryptoMethods.FirstOrDefault().Event_Var_Name, methodSignatureModelList);
+                                    EventsOrderDictionary.Add(cryptoMethods.FirstOrDefault().Event_Var_Name, cryptoMethods.FirstOrDefault().Method_Name);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         private void AnalyzeCodeBlockAction(CodeBlockStartAnalysisContext<SyntaxKind> context)
-        {
+        {            
             context.RegisterCodeBlockEndAction(AnalyzeCodeBLockEndAction);
         }        
 

@@ -376,6 +376,81 @@ namespace CryslParser.Visitors
             return cryptoSignature;
         }
 
+        public override object VisitSngEventMethodWithoutArguments(CryslGrammarParser.SngEventMethodWithoutArgumentsContext context)
+        {
+            CryptoSignature cryptoSignature = new CryptoSignature();
+
+            foreach (var varName in context.VARNAME())
+            {
+                //Check for crypto signature identifiers
+                if (varName.Symbol.TokenIndex < context.COLON().Symbol.TokenIndex)
+                {
+                    cryptoSignature.Event_Var_Name = varName.GetText();
+                }
+                //Check for crypto signature methods
+                else if (varName.Symbol.TokenIndex > context.COLON().Symbol.TokenIndex && (varName.Symbol.TokenIndex < context.OP().Symbol.TokenIndex && varName.Symbol.TokenIndex < context.CP().Symbol.TokenIndex))
+                {
+                    cryptoSignature.Method_Name = varName.GetText();
+                    cryptoSignature.Is_property = false;
+                    cryptoSignature.Argument_types = new Collection<ArgumentTypes>();
+                }
+            }
+
+            return cryptoSignature;
+
+        }
+
+        public override object VisitSngEventMethodWithArguments(CryslGrammarParser.SngEventMethodWithArgumentsContext context)
+        {
+            Dictionary<int, string> argumentValues = new Dictionary<int, string>();
+            CryptoSignature cryptoSignature = new CryptoSignature();
+            //ArgumentTypes argumentTypes = new ArgumentTypes();
+            List<ArgumentTypes> argumentsList = new List<ArgumentTypes>();
+
+            foreach (var varName in context.VARNAME())
+            {
+                //Check for crypto signature identifiers
+                if (varName.Symbol.TokenIndex < context.COLON().Symbol.TokenIndex)
+                {
+                    cryptoSignature.Event_Var_Name = varName.GetText();
+                }
+                //Check for crypto signature methods
+                else if (varName.Symbol.TokenIndex > context.COLON().Symbol.TokenIndex && (varName.Symbol.TokenIndex < context.OP().Symbol.TokenIndex && varName.Symbol.TokenIndex < context.CP().Symbol.TokenIndex))
+                {
+                    cryptoSignature.Method_Name = varName.GetText();
+                    cryptoSignature.Is_property = false;
+                }
+                //Check for crypto signature argument values
+                else if (varName.Symbol.TokenIndex > context.OP().Symbol.TokenIndex && varName.Symbol.TokenIndex < context.CP().Symbol.TokenIndex)
+                {
+                    argumentValues.Add(varName.Symbol.TokenIndex, varName.GetText());
+                }
+
+            }
+            //Check for optional arguments
+            foreach (var opArguments in context.UNSCORE())
+            {
+                if (opArguments.Symbol.TokenIndex > context.OP().Symbol.TokenIndex && opArguments.Symbol.TokenIndex < context.CP().Symbol.TokenIndex)
+                {
+                    argumentValues.Add(opArguments.Symbol.TokenIndex, opArguments.GetText());
+                }
+            }
+            var sortedArgumentsList = from arguments in argumentValues
+                                      orderby arguments.Key ascending
+                                      select arguments;
+
+            foreach (KeyValuePair<int, string> sortedArguments in sortedArgumentsList)
+            {
+                ArgumentTypes argumentTypes = new ArgumentTypes();
+                argumentTypes.Argument = sortedArguments.Value;
+                argumentsList.Add(argumentTypes);
+            }
+
+            cryptoSignature.Argument_types = argumentsList;
+
+            return cryptoSignature;
+        }
+
         public override object VisitAggregator(CryslGrammarParser.AggregatorContext context)
         {            
             Aggregator aggregator = new Aggregator();

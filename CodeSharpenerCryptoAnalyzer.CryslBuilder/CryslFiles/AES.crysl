@@ -22,10 +22,12 @@ EVENTS
 	CreateEncryptor: cryptoTransform = CreateEncryptor(key, IV);
 
 	CreateDecryptor: cryptoTransform = CreateDecryptor(key, IV);
+
+	Dispose: Dispose();
 	
 	
 ORDER
-	Create, s1?, s2?, s3?, CreateEncryptor?, CreateDecryptor?
+	Create, s1?, s2?, s3?, CreateEncryptor?, CreateDecryptor?, Dispose
 
 CONSTRAINTS
 		algorithm in {"AES", "AesCryptoServiceProvider", "System.Security.Cryptography.AesCryptoServiceProvider", "AesManaged", "System.Security.Cryptography.AesManaged"};
