@@ -686,6 +686,7 @@ namespace CryslParser.Visitors
                 {
                     cryptoSignature.Method_Name = varName.GetText();
                     cryptoSignature.Is_property = false;
+                    cryptoSignature.Argument_types = new Collection<ArgumentTypes>();
                 }
             }
 

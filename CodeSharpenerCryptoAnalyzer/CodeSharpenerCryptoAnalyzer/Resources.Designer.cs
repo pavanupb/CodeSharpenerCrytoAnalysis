@@ -88,6 +88,60 @@ namespace CodeSharpenerCryptoAnalyzer {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Crysl File Contains One or More Errors.
+        /// </summary>
+        internal static string CryslErrorDescription {
+            get {
+                return ResourceManager.GetString("CryslErrorDescription", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Please Correct the Errors in the Crysl File &apos;{0}&apos;.
+        /// </summary>
+        internal static string CryslErrorMessageFormat {
+            get {
+                return ResourceManager.GetString("CryslErrorMessageFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Crysl Grammar File is not Syntactically or Semantically Correct.
+        /// </summary>
+        internal static string CryslErrorTitle {
+            get {
+                return ResourceManager.GetString("CryslErrorTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to A Method Of Derived Type is Being Used.
+        /// </summary>
+        internal static string DerivedTypeDescription {
+            get {
+                return ResourceManager.GetString("DerivedTypeDescription", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The Method Used is of Type &apos;{0}&apos;. Considering Using its BaseType &apos;{1}&apos;.
+        /// </summary>
+        internal static string DerivedTypeMessageFormat {
+            get {
+                return ResourceManager.GetString("DerivedTypeMessageFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Method of Derived Type In Use.
+        /// </summary>
+        internal static string DerivedTypeTitle {
+            get {
+                return ResourceManager.GetString("DerivedTypeTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Event Aggregation Condition not Satisfied.
         /// </summary>
         internal static string EventAggAnalyzerDescription {

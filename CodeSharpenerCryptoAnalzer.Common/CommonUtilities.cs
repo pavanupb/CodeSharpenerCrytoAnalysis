@@ -179,21 +179,24 @@ namespace CodeSharpenerCryptoAnalzer.Common
             foreach (var method in methods.Crypto_Signature)
             {
                 methodSigBuilder.Append(method.Method_Name);
-                if (method.Argument_types.Count() != 0)
+                if (method.Argument_types != null)
                 {
-                    methodSigBuilder.Append("(");
-                    var methodParameters = string.Join(", ", method.Argument_types.Select(x => x.Argument));
-                    methodSigBuilder.Append(methodParameters);
-                    methodSigBuilder.Append(")");
-                }
-                else
-                {
-                    methodSigBuilder.Append("( )");
-                }
+                    if (method.Argument_types.Count() != 0)
+                    {
+                        methodSigBuilder.Append("(");
+                        var methodParameters = string.Join(", ", method.Argument_types.Select(x => x.Argument));
+                        methodSigBuilder.Append(methodParameters);
+                        methodSigBuilder.Append(")");
+                    }
+                    else
+                    {
+                        methodSigBuilder.Append("( )");
+                    }
 
-                if (!method.Equals(lastItem))
-                {
-                    methodSigBuilder.Append(", ");
+                    if (!method.Equals(lastItem))
+                    {
+                        methodSigBuilder.Append(", ");
+                    }
                 }
             }
             return methodSigBuilder;

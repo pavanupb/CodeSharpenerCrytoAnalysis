@@ -12,5 +12,6 @@ namespace CryslCSharpObjectBuilder.Models.CSharpModels
         public ErrorMessageModel SyntaxErrors { get; set; }
         public bool IsValid { get; set; }
         public IList<ValidationFailure> ValidationErrors { get; set; }
+        public string FilePath { get; set; }
     }
 }

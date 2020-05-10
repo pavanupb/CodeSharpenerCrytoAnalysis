@@ -34,14 +34,38 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
         /// <returns></returns>
         public ValidEvents AnalyzeMemAccessExprSyntax(IdentifierNameSyntax identifier, IEnumerable<CryptoSignature> cryptoMethods, Methods methods, CryslJsonModel cryslData, SyntaxNodeAnalysisContext context, IMethodSymbol identifierSymbolInfo, TextSpan nodeSPan, string invocatorType)
         {
-            ValidEvents validEvents = new ValidEvents();
-            // Check for valid event only if Identifier is of Spec type in Crysl.
+            ValidEvents validEvents = new ValidEvents();            
+            // Check for valid event only if Identifier is of Spec type in Crysl.            
             if (invocatorType.Equals(cryslData.Spec_Section.Class_Name))
             {
                 List<MethodSignatureModel> methodSignatureModelsList = new List<MethodSignatureModel>();
                 //Iterate through different signatures of the same event and add the matched signature event
                 foreach (var method in cryptoMethods)
-                {                    
+                {
+                    if(!String.IsNullOrEmpty(method.Object_variable))
+                    {
+                        var localDeclarationStatement = context.Node.Ancestors().OfType<LocalDeclarationStatementSyntax>();
+                        if(localDeclarationStatement.Count() != 0)
+                        {
+                            var variableDeclarationNode = localDeclarationStatement.FirstOrDefault().ChildNodes().OfType<VariableDeclarationSyntax>().FirstOrDefault();
+                            if (variableDeclarationNode.Variables.Count() > 0)
+                            {
+                                var declarationStmtSymInfo = context.SemanticModel.GetDeclaredSymbol(variableDeclarationNode.Variables.FirstOrDefault());
+                                var declaratorType = declarationStmtSymInfo as ILocalSymbol;
+
+                                var declaredObjectType = cryslData.Object_Section.Objects_Declaration.Select(x => x).Where(x => x.Var_name.Equals(method.Object_variable));
+                                if(declaredObjectType.Count() != 0 && declaratorType != null)
+                                {
+                                    if(!declaredObjectType.First().Object_type.Equals(declaratorType.Type.ToString()))
+                                    {
+                                        validEvents.IsValidEvent = false;
+                                        validEvents.IsProperty = false;
+                                        return validEvents;
+                                    }
+                                }
+                            }
+                        }
+                    }
                     ICommonUtilities commonUtilities = serviceProvider.GetService<ICommonUtilities>();
                     //Check if the Event is Valid
                     bool isValidEvent = commonUtilities.IsMethodInEvents(method, identifierSymbolInfo, cryslData.Object_Section.Objects_Declaration);
@@ -57,54 +81,12 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
                         validEvents.IsValidEvent = true;
                         validEvents.IsProperty = false;
                         validEvents.ValidMethods = currentValidEvent;
-                        validEvents.PropertyName = method.Event_Var_Name;                        
-                        //Go to the Containing Method Declaration Node
-                        //var containingMethodDeclarationNode = identifier.FirstAncestorOrSelf<MethodDeclarationSyntax>();                        
-                        //var invExprSyntaxWalker = new InvocationExpressionSyntaxWalker(cryslData, context, nodeSPan);
-                        //Walk through the current method to find all invocations of the given type
-                        //invExprSyntaxWalker.Visit(containingMethodDeclarationNode);
-                        //Dictionary<string, List<MethodSignatureModel>> validEventsDict = invExprSyntaxWalker.GetMethodsList();
-                        /*if (!validEventsDict.ContainsKey(method.Event_Var_Name))
-                        {
-                            validEventsDict.Add(method.Event_Var_Name, methodSignatureModelsList);
-                        }
-                        //If there are two events of same type
-                        else if(validEventsDict.ContainsKey(method.Event_Var_Name))
-                        {
-                            foreach(var methodSig in validEventsDict.Values)
-                            {
-                                methodSignatureModelsList.AddRange(methodSig);
-
-                            }
-                            validEventsDict[method.Event_Var_Name] = methodSignatureModelsList;
-                        }*/
-                        //Check if the Aggregator Condition Satisfies
-                        /*if (methods.Aggregator != null)
-                        {
-                            bool isAggregatorCondition = commonUtilities.CheckAggregator(validEventDict, methods.Aggregator.Aggregators);
-                            if (isAggregatorCondition)
-                            {
-                                validEvents.IsValidEvent = true;
-                                validEvents.ValidEventsDict = validEventDict;
-                                validEvents.AggregatorName = methods.Aggregator.Aggregator_Name;
-                            }
-                            else
-                            {
-                                validEvents.IsValidEvent = false;
-                            }
-                        }
-                        else
-                        {
-                            validEvents.IsValidEvent = true;
-                            validEvents.ValidEventsDict = validEventDict;
-                            validEvents.AggregatorName = method.Event_Var_Name;
-                            
-                        }*/
+                        validEvents.PropertyName = method.Event_Var_Name; 
 
                         return validEvents;
                     }
                 }
-            }
+            }            
             validEvents.IsValidEvent = false;
             validEvents.IsProperty = false;
             return validEvents;

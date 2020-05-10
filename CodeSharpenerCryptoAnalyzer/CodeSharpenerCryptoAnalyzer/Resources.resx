@@ -126,6 +126,24 @@
   <data name="ConstraintAnalyzerTitle" xml:space="preserve">
     <value>Invalid Method Parameter</value>
   </data>
+  <data name="CryslErrorDescription" xml:space="preserve">
+    <value>Crysl File Contains One or More Errors</value>
+  </data>
+  <data name="CryslErrorMessageFormat" xml:space="preserve">
+    <value>Please Correct the Errors in the Crysl File '{0}'</value>
+  </data>
+  <data name="CryslErrorTitle" xml:space="preserve">
+    <value>Crysl Grammar File is not Syntactically or Semantically Correct</value>
+  </data>
+  <data name="DerivedTypeDescription" xml:space="preserve">
+    <value>A Method Of Derived Type is Being Used</value>
+  </data>
+  <data name="DerivedTypeMessageFormat" xml:space="preserve">
+    <value>The Method Used is of Type '{0}'. Considering Using its BaseType '{1}'</value>
+  </data>
+  <data name="DerivedTypeTitle" xml:space="preserve">
+    <value>Method of Derived Type In Use</value>
+  </data>
   <data name="EventAggAnalyzerDescription" xml:space="preserve">
     <value>Event Aggregation Condition not Satisfied</value>
   </data>

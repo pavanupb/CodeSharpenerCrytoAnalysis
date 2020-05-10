@@ -19,6 +19,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.FlowAnalysis;
 using Microsoft.CodeAnalysis.FlowAnalysis.DataFlow;
 using Microsoft.CodeAnalysis.FlowAnalysis.DataFlow.PointsToAnalysis;
+using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CodeSharpenerCryptoAnalyzer
@@ -59,8 +60,15 @@ namespace CodeSharpenerCryptoAnalyzer
         private static readonly LocalizableString HardCodedCheckMessageFormat = new LocalizableResourceString(nameof(Resources.HardCodedMessageFormat), Resources.ResourceManager, typeof(Resources));
         private static readonly LocalizableString HardCodedCheckDescription = new LocalizableResourceString(nameof(Resources.HardCodedDescription), Resources.ResourceManager, typeof(Resources));
         private const string HardCodedCheckCategory = "Violation";
-        private static DiagnosticDescriptor HardCodedCheckViolationRule = new DiagnosticDescriptor(HardCodedCheckDiagnosticId, HardCodedCheckTitle, HardCodedCheckMessageFormat, HardCodedCheckCategory, DiagnosticSeverity.Warning, isEnabledByDefault: true, description: HardCodedCheckDescription);
-        public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get { return ImmutableArray.Create(EventViolationRule, EventAggViolationRule, ConstraintAnalyzerViolationRule, OrderAnalyzerViolationRule, HardCodedCheckViolationRule); } }
+        private static DiagnosticDescriptor HardCodedCheckViolationRule = new DiagnosticDescriptor(HardCodedCheckDiagnosticId, HardCodedCheckTitle, HardCodedCheckMessageFormat, HardCodedCheckCategory, DiagnosticSeverity.Warning, isEnabledByDefault: true, description: HardCodedCheckDescription);        
+
+        public const string DerivedTypeDiagnsoticId = "DerivedMethodInUse";
+        private static readonly LocalizableString DerivedTypeTitle = new LocalizableResourceString(nameof(Resources.DerivedTypeTitle), Resources.ResourceManager, typeof(Resources));
+        private static readonly LocalizableString DerivedTypeMessageFormat = new LocalizableResourceString(nameof(Resources.DerivedTypeMessageFormat), Resources.ResourceManager, typeof(Resources));
+        private static readonly LocalizableString DerivedTypeDescription = new LocalizableResourceString(nameof(Resources.DerivedTypeDescription), Resources.ResourceManager, typeof(Resources));
+        private const string DerivedTypeCategory = "Warning";
+        private static DiagnosticDescriptor DerivedTypeRule = new DiagnosticDescriptor(DerivedTypeDiagnsoticId, DerivedTypeTitle, DerivedTypeMessageFormat, DerivedTypeCategory, DiagnosticSeverity.Warning, isEnabledByDefault: true, description: DerivedTypeDescription);
+        public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get { return ImmutableArray.Create(EventViolationRule, EventAggViolationRule, ConstraintAnalyzerViolationRule, OrderAnalyzerViolationRule, HardCodedCheckViolationRule, DerivedTypeRule); } }
 
 
 
@@ -79,10 +87,13 @@ namespace CodeSharpenerCryptoAnalyzer
         //Dictionary of all analyzed events
         private static Dictionary<string, string> EventsOrderDictionary;
 
-        private static List<KeyValuePair<ISymbol, ISymbol>> TaintedValuesDictionary;        
+        private static List<KeyValuePair<ISymbol, ISymbol>> TaintedValuesDictionary;
+
+        private static CryslResult _CryslCompilationModel;        
 
         public override void Initialize(AnalysisContext context)
         {
+            
             var services = new ServiceCollection();
             services.AddTransient<ICommonUtilities, CommonUtilities>();
             services.AddTransient<IEventSectionAnalyzer, EventsSectionAnalyzer>();
@@ -103,6 +114,8 @@ namespace CodeSharpenerCryptoAnalyzer
                 return;
             }
         }
+
+        
 
         public void InitializeContext(AnalysisContext context, CryslJsonModel cryslCompilationModel)
         {
@@ -181,7 +194,7 @@ namespace CodeSharpenerCryptoAnalyzer
             var invocationExpressionNode = context.Node;
             var memAcessExprNode = invocationExpressionNode.ChildNodes().OfType<MemberAccessExpressionSyntax>();
             var argumentsList = invocationExpressionNode.ChildNodes().OfType<ArgumentListSyntax>();
-            ICommonUtilities commonUtilities = _serviceProvider.GetService<ICommonUtilities>();          
+            ICommonUtilities commonUtilities = _serviceProvider.GetService<ICommonUtilities>();            
 
             foreach (var node in memAcessExprNode)
             {
@@ -192,113 +205,128 @@ namespace CodeSharpenerCryptoAnalyzer
                     var invocatorIdentifier = identifierNode.FirstOrDefault();
                     var invokedMethod = identifierNode.LastOrDefault();
                     string invocatorType = commonUtilities.GetInvocatorType(context.SemanticModel.GetSymbolInfo(invocatorIdentifier).Symbol);
-                    var result = _cryslSpecificationModel.Event_Section.Methods.Select(x => x.Crypto_Signature
-                     .Where(y => y.Method_Name.ToString().Equals(invokedMethod.Identifier.Value.ToString())));
-                    foreach (var methods in _cryslSpecificationModel.Event_Section.Methods)
+                    if (invocatorType.Equals(_cryslSpecificationModel.Spec_Section.Class_Name))
                     {
-                        // Check if method signature matches with the method signature defined in events section of the Crysl.
-                        var cryptoMethods = methods.Crypto_Signature.Select(y => y).Where(x => x.Method_Name.ToString().Equals(invokedMethod.Identifier.Value.ToString()));
-                        if (cryptoMethods.Count() > 0)
-                        {
-                            IEventSectionAnalyzer analyzer = _serviceProvider.GetService<IEventSectionAnalyzer>();
-                            var identifierSymbolInfo = (IMethodSymbol)context.SemanticModel.GetSymbolInfo(invokedMethod).Symbol;
+                        var result = _cryslSpecificationModel.Event_Section.Methods.Select(x => x.Crypto_Signature
+                         .Where(y => y.Method_Name.ToString().Equals(invokedMethod.Identifier.Value.ToString())));
+                        foreach (var methods in _cryslSpecificationModel.Event_Section.Methods)
+                        {                            
 
-                            //Check for Valid Events
-                            ValidEvents validEvents = analyzer.AnalyzeMemAccessExprSyntax(invokedMethod, cryptoMethods, methods, _cryslSpecificationModel, context, identifierSymbolInfo, node.Span, invocatorType);
+                            // Check if method signature matches with the method signature defined in events section of the Crysl.
+                            var cryptoMethods = methods.Crypto_Signature.Select(y => y).Where(x => x.Method_Name.ToString().Equals(invokedMethod.Identifier.Value.ToString()));
+                            if (cryptoMethods.Count() > 0)
+                            { 
+                                IEventSectionAnalyzer analyzer = _serviceProvider.GetService<IEventSectionAnalyzer>();
+                                var identifierSymbolInfo = (IMethodSymbol)context.SemanticModel.GetSymbolInfo(invokedMethod).Symbol;
 
-                            if (validEvents.IsValidEvent)
-                            {
+                                //Check for Valid Events
+                                ValidEvents validEvents = analyzer.AnalyzeMemAccessExprSyntax(invokedMethod, cryptoMethods, methods, _cryslSpecificationModel, context, identifierSymbolInfo, node.Span, invocatorType);
 
-                                //Check only if Aggregators are present
-                                if (methods.Aggregator != null)
+                                if (validEvents.IsValidEvent)
                                 {
-                                    //Add valid events to Events and Order Dictionary
-                                    AddEventsToDictionary(methods.Aggregator.Aggregator_Name, validEvents, cryptoMethods.FirstOrDefault().Method_Name);
 
-                                    bool isAggConditionSatisfied = commonUtilities.CheckAggregator(ValidEventsDictionary, methods.Aggregator.Aggregators);
-                                    if (!isAggConditionSatisfied)
+                                    //Check only if Aggregators are present
+                                    if (methods.Aggregator != null)
                                     {
-                                        var diagnsotics = Diagnostic.Create(EventAggViolationRule, node.GetLocation(), validEvents.PropertyName);
-                                        context.ReportDiagnostic(diagnsotics);
-                                    }
-                                }
-                                //Add single event to dictionary if aggregator not present.
-                                else
-                                {
-                                    AddEventsToDictionary(validEvents.PropertyName, validEvents, cryptoMethods.FirstOrDefault().Method_Name);
-                                }
+                                        //Add valid events to Events and Order Dictionary
+                                        AddEventsToDictionary(methods.Aggregator.Aggregator_Name, validEvents, cryptoMethods.FirstOrDefault().Method_Name);
 
-                                //Iterate throigh parameters if present and check for constraints only if arguments are present
-                                if (validEvents.ValidMethods.Parameters.Count > 0)
-                                {
-                                    //Check for valid constraints
-                                    IConstraintsSectionAnalyzer constraintsSectionAnalyzer = _serviceProvider.GetService<IConstraintsSectionAnalyzer>();
-                                    List<ConstraintsModel> satisfiedConstraintsList = new List<ConstraintsModel>();
-
-                                    foreach (var parameter in validEvents.ValidMethods.Parameters)
-                                    {
-                                        var constraintsList = _cryslSpecificationModel.Constraints_Section.Constraints.Where(y => y.Object_Varname.ToString().Equals(parameter.Argument.ToString())).Select(x => x.Constraints_List);
-                                        //Check only if constraint is present for the method arguments
-                                        if (constraintsList.Count() != 0)
+                                        bool isAggConditionSatisfied = commonUtilities.CheckAggregator(ValidEventsDictionary, methods.Aggregator.Aggregators);
+                                        if (!isAggConditionSatisfied)
                                         {
+                                            var diagnsotics = Diagnostic.Create(EventAggViolationRule, node.GetLocation(), validEvents.PropertyName);
+                                            context.ReportDiagnostic(diagnsotics);
+                                        }
+                                    }
+                                    //Add single event to dictionary if aggregator not present.
+                                    else
+                                    {
+                                        AddEventsToDictionary(validEvents.PropertyName, validEvents, cryptoMethods.FirstOrDefault().Method_Name);
+                                    }
 
-                                            satisfiedConstraintsList = constraintsSectionAnalyzer.AnalyzeParameters(argumentsList, validEvents.ValidMethods.Parameters, _cryslSpecificationModel.Constraints_Section.Constraints);
-                                            foreach (var constraints in satisfiedConstraintsList)
+                                    //Iterate throigh parameters if present and check for constraints only if arguments are present
+                                    if (validEvents.ValidMethods.Parameters.Count > 0)
+                                    {
+                                        //Check for valid constraints
+                                        IConstraintsSectionAnalyzer constraintsSectionAnalyzer = _serviceProvider.GetService<IConstraintsSectionAnalyzer>();
+                                        List<ConstraintsModel> satisfiedConstraintsList = new List<ConstraintsModel>();
+
+                                        foreach (var parameter in validEvents.ValidMethods.Parameters)
+                                        {
+                                            var constraintsList = _cryslSpecificationModel.Constraints_Section.Constraints.Where(y => y.Object_Varname.ToString().Equals(parameter.Argument.ToString())).Select(x => x.Constraints_List);
+                                            //Check only if constraint is present for the method arguments
+                                            if (constraintsList.Count() != 0)
                                             {
-                                                if (!constraints.IsConstraintSatisfied)
+
+                                                satisfiedConstraintsList = constraintsSectionAnalyzer.AnalyzeParameters(argumentsList, validEvents.ValidMethods.Parameters, _cryslSpecificationModel.Constraints_Section.Constraints);
+                                                foreach (var constraints in satisfiedConstraintsList)
                                                 {
-                                                    var accepetedParameterValues = _cryslSpecificationModel.Constraints_Section.Constraints.Where(x => x.Object_Varname.Equals(validEvents.ValidMethods.Parameters.FirstOrDefault().Argument) && x.Additional_constraints == null).Select(y => y.Constraints_List);
-                                                    string validParameterValues = string.Empty;
-                                                    if (accepetedParameterValues.Count() != 0)
+                                                    if (!constraints.IsConstraintSatisfied)
                                                     {
-                                                        validParameterValues = string.Join(",", accepetedParameterValues.FirstOrDefault());
+                                                        var accepetedParameterValues = _cryslSpecificationModel.Constraints_Section.Constraints.Where(x => x.Object_Varname.Equals(validEvents.ValidMethods.Parameters.FirstOrDefault().Argument) && x.Additional_constraints == null).Select(y => y.Constraints_List);
+                                                        string validParameterValues = string.Empty;
+                                                        if (accepetedParameterValues.Count() != 0)
+                                                        {
+                                                            validParameterValues = string.Join(",", accepetedParameterValues.FirstOrDefault());
+                                                        }
+
+                                                        var diagnsotics = Diagnostic.Create(ConstraintAnalyzerViolationRule, node.GetLocation(), satisfiedConstraintsList.FirstOrDefault().NotSatisfiedParameter, validParameterValues);
+                                                        context.ReportDiagnostic(diagnsotics);
                                                     }
-
-                                                    var diagnsotics = Diagnostic.Create(ConstraintAnalyzerViolationRule, node.GetLocation(), satisfiedConstraintsList.FirstOrDefault().NotSatisfiedParameter, validParameterValues);
-                                                    context.ReportDiagnostic(diagnsotics);
                                                 }
-                                            }
-                                            //ReportConstraintsSection(context, satisfiedConstraintsList);
+                                                //ReportConstraintsSection(context, satisfiedConstraintsList);
 
-                                            List<AddConstraints> additionalConstraintsCheck = new List<AddConstraints>();
-                                            AdditionalConstraintsDict.TryGetValue(identifierSymbolInfo.ReturnType.ToString(), out additionalConstraintsCheck);
+                                                List<AddConstraints> additionalConstraintsCheck = new List<AddConstraints>();
+                                                AdditionalConstraintsDict.TryGetValue(identifierSymbolInfo.ReturnType.ToString(), out additionalConstraintsCheck);
 
-                                            List<AddConstraints> addConstraintsList;
-                                            //Add only if the key is not present in the additional constraints dictionary
-                                            if (additionalConstraintsCheck == null)
-                                            {
-                                                addConstraintsList = new List<AddConstraints>();
-                                                AddConstraints additionalConstraints = new AddConstraints
+                                                List<AddConstraints> addConstraintsList;
+                                                //Add only if the key is not present in the additional constraints dictionary
+                                                if (additionalConstraintsCheck == null)
                                                 {
-                                                    EventKey = validEvents.PropertyName,
-                                                    EventVariableDeclarator = invokedMethod.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>().First().Identifier.Text,
-                                                    ConstraintsModels = satisfiedConstraintsList
-                                                };
-                                                addConstraintsList.Add(additionalConstraints);
-                                                AdditionalConstraintsDict.Add(identifierSymbolInfo.ReturnType.ToString(), addConstraintsList);
-                                            }
-                                            //If key is present update the dictionary with the variable declarator
-                                            else
-                                            {
-                                                AddConstraints additionalConstraints = new AddConstraints
+                                                    addConstraintsList = new List<AddConstraints>();
+                                                    AddConstraints additionalConstraints = new AddConstraints
+                                                    {
+                                                        EventKey = validEvents.PropertyName,
+                                                        EventVariableDeclarator = invokedMethod.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>().First().Identifier.Text,
+                                                        ConstraintsModels = satisfiedConstraintsList
+                                                    };
+                                                    addConstraintsList.Add(additionalConstraints);
+                                                    AdditionalConstraintsDict.Add(identifierSymbolInfo.ReturnType.ToString(), addConstraintsList);
+                                                }
+                                                //If key is present update the dictionary with the variable declarator
+                                                else
                                                 {
-                                                    EventKey = validEvents.PropertyName,
-                                                    EventVariableDeclarator = invokedMethod.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>().First().Identifier.Text,
-                                                    ConstraintsModels = satisfiedConstraintsList
-                                                };
-                                                additionalConstraintsCheck.Add(additionalConstraints);
-                                                AdditionalConstraintsDict[identifierSymbolInfo.ReturnType.ToString()] = additionalConstraintsCheck;
+                                                    AddConstraints additionalConstraints = new AddConstraints
+                                                    {
+                                                        EventKey = validEvents.PropertyName,
+                                                        EventVariableDeclarator = invokedMethod.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>().First().Identifier.Text,
+                                                        ConstraintsModels = satisfiedConstraintsList
+                                                    };
+                                                    additionalConstraintsCheck.Add(additionalConstraints);
+                                                    AdditionalConstraintsDict[identifierSymbolInfo.ReturnType.ToString()] = additionalConstraintsCheck;
 
+                                                }
                                             }
                                         }
                                     }
                                 }
+                                else
+                                {
+                                    StringBuilder validEventsSig = commonUtilities.GetValidMethodSignatures(methods);
+                                    var diagnsotic = Diagnostic.Create(EventViolationRule, node.GetLocation(), invokedMethod.Identifier.Text, validEventsSig.ToString());
+                                    context.ReportDiagnostic(diagnsotic);
+                                }
                             }
-                            else
+                        }
+                    }
+                    else if(Type.GetType(invocatorType) != null)
+                    {
+                        if (Type.GetType(invocatorType).BaseType != null)
+                        {
+                            if (Type.GetType(invocatorType).BaseType.FullName.Equals(_cryslSpecificationModel.Spec_Section.Class_Name))
                             {
-                                StringBuilder validEventsSig = commonUtilities.GetValidMethodSignatures(methods);
-                                var diagnsotic = Diagnostic.Create(EventViolationRule, node.GetLocation(), invokedMethod.Identifier.Text, validEventsSig.ToString());
-                                context.ReportDiagnostic(diagnsotic);
+                                var diagnsotics = Diagnostic.Create(DerivedTypeRule, invocationExpressionNode.GetLocation(), invocatorType, _cryslSpecificationModel.Spec_Section.Class_Name);
+                                context.ReportDiagnostic(diagnsotics);
                             }
                         }
                     }
@@ -365,7 +393,6 @@ namespace CodeSharpenerCryptoAnalyzer
                                 var rightExprSymbolInfo = context.SemanticModel.GetSymbolInfo(simpleAssignExpr.Right).Symbol;
 
                                 //Check for tainted values
-
                                 if (rightExprSymbolInfo != null)
                                 {
                                     if (IsTaintedValueExists(rightExprSymbolInfo.ContainingSymbol, rightExprSymbolInfo))
@@ -558,37 +585,51 @@ namespace CodeSharpenerCryptoAnalyzer
             {
                 foreach(var local in operationSymbol.Locals)
                 {
-                    if(local.Type.ToString().Equals(_cryslSpecificationModel.Spec_Section.Class_Name))
+                    if (local.Type.ToString().Equals(_cryslSpecificationModel.Spec_Section.Class_Name))
                     {
                         foreach (var methods in _cryslSpecificationModel.Event_Section.Methods)
                         {
                             var cryptoMethods = methods.Crypto_Signature.Select(y => y).Where(x => x.Method_Name.ToString().Equals("Dispose"));
-                            if(cryptoMethods.Count() > 0)
+                            if (cryptoMethods.Count() > 0)
                             {
-                                
+
                                 MethodSignatureModel methodSignatureModel = new MethodSignatureModel
                                 {
                                     MethodName = "Dispose"
                                 };
-                                
+
                                 List<MethodSignatureModel> methodSignatureModels = new List<MethodSignatureModel>();
                                 ValidEventsDictionary.TryGetValue(cryptoMethods.FirstOrDefault().Event_Var_Name, out methodSignatureModels);
                                 if (methodSignatureModels != null)
                                 {
                                     methodSignatureModels.Add(methodSignatureModel);
                                     ValidEventsDictionary[cryptoMethods.FirstOrDefault().Event_Var_Name] = methodSignatureModels;
-                                    EventsOrderDictionary[cryptoMethods.FirstOrDefault().Event_Var_Name] = cryptoMethods.FirstOrDefault().Method_Name;
+                                    if (methods.Aggregator == null)
+                                    {
+                                        EventsOrderDictionary[cryptoMethods.FirstOrDefault().Event_Var_Name] = cryptoMethods.FirstOrDefault().Method_Name;
+                                    }
+                                    else
+                                    {
+                                        EventsOrderDictionary[methods.Aggregator.Aggregator_Name] = cryptoMethods.FirstOrDefault().Method_Name;
+                                    }
                                 }
                                 else
                                 {
                                     List<MethodSignatureModel> methodSignatureModelList = new List<MethodSignatureModel>();
                                     methodSignatureModelList.Add(methodSignatureModel);
                                     ValidEventsDictionary.Add(cryptoMethods.FirstOrDefault().Event_Var_Name, methodSignatureModelList);
-                                    EventsOrderDictionary.Add(cryptoMethods.FirstOrDefault().Event_Var_Name, cryptoMethods.FirstOrDefault().Method_Name);
+                                    if (methods.Aggregator == null)
+                                    {
+                                        EventsOrderDictionary.Add(cryptoMethods.FirstOrDefault().Event_Var_Name, cryptoMethods.FirstOrDefault().Method_Name);
+                                    }
+                                    else
+                                    {
+                                        EventsOrderDictionary.Add(methods.Aggregator.Aggregator_Name, cryptoMethods.FirstOrDefault().Method_Name);
+                                    }
                                 }
                             }
                         }
-                    }
+                    }                    
                 }
             }
         }
