@@ -177,7 +177,7 @@ namespace CodeSharpenerCryptoAnalyzer
         }
 
         /// <summary>
-        /// Report HardCoded Byte Array Values
+        /// Report HardCoded Values
         /// </summary>
         /// <param name="context"></param>
         private void AnalyzeLocalDeclarationStatement(SyntaxNodeAnalysisContext context)
@@ -185,11 +185,29 @@ namespace CodeSharpenerCryptoAnalyzer
             var localDeclarationStatement = (LocalDeclarationStatementSyntax)context.Node;
             LocalDeclarationStatementVisitor localDeclarationStatementVisitor = new LocalDeclarationStatementVisitor();
             localDeclarationStatementVisitor.Visit(localDeclarationStatement);
-            var isArrayInitializerPresent = localDeclarationStatementVisitor.GetResult();
+
+            var isArrayInitializerPresent = localDeclarationStatementVisitor.GetByteArrayResult();
             if (isArrayInitializerPresent.IsArrayInitializer)
             {
                 //Adding to Tainted Dictionary for all Byte ArrayInitializer Types
                 var nodeSymbolInfo = context.SemanticModel.GetDeclaredSymbol(isArrayInitializerPresent.DeclaratorSyntax);
+                if (!IsTaintedValueExists(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo))
+                {
+                    TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo));
+                }
+                var dataFlowAnalysisResult = context.SemanticModel.AnalyzeDataFlow(localDeclarationStatement);
+                if (dataFlowAnalysisResult.ReadOutside.Contains(nodeSymbolInfo))
+                {
+                    var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
+                    context.ReportDiagnostic(diagnsotics);
+                }
+            }
+
+            var isStringInitializerPresent = localDeclarationStatementVisitor.GetStringLiteralResult();
+            if (isStringInitializerPresent.IsStringLiteralInitializer)
+            {
+                //Adding to Tainted Dictionary for all Byte ArrayInitializer Types
+                var nodeSymbolInfo = context.SemanticModel.GetDeclaredSymbol(isStringInitializerPresent.DeclaratorSyntax);
                 if (!IsTaintedValueExists(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo))
                 {
                     TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo));
@@ -243,6 +261,22 @@ namespace CodeSharpenerCryptoAnalyzer
 
                                 if (validEvents.IsValidEvent)
                                 {
+                                    //Check if any argument value is tainted
+                                    ArgumentsVisitor argumentsVisitor = new ArgumentsVisitor();
+                                    foreach (var arguments in argumentsList)
+                                    {
+                                        argumentsVisitor.Visit(arguments);
+                                        var isIdentifierPresent = argumentsVisitor.GetResult();
+                                        if (isIdentifierPresent.IsIdentifierNodePresent)
+                                        {
+                                            var argumentSymbolInfo = context.SemanticModel.GetSymbolInfo(isIdentifierPresent.IdentifierNameSyntax);
+                                            if (IsTaintedValueExists(argumentSymbolInfo.Symbol.ContainingSymbol, argumentSymbolInfo.Symbol))
+                                            {
+                                                var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, arguments.GetLocation());
+                                                context.ReportDiagnostic(diagnsotics);
+                                            }
+                                        }
+                                    }
 
                                     //Check only if Aggregators are present
                                     if (methods.Aggregator != null)
@@ -582,7 +616,7 @@ namespace CodeSharpenerCryptoAnalyzer
                         }*/
 
                         bool taintedValuePresent = (taintedValue.Key.ToString().Equals(containingMethod.ToString()) && taintedValue.Value.Kind.Equals(nodeInfo.Kind) && taintedValue.Value.ToString().Equals(nodeInfo.ToString()) && taintedValue.Value.Name.ToString().Equals(nodeInfo.Name.ToString())) ? true : false;
-                        
+
                         //bool taintedValueInContainingSymbol = (taintedValue.Key.Equals(containingMethod.ContainingSymbol) && taintedValue.Value.Equals(nodeInfo)) ? true : false;
                         if (taintedValuePresent)
                         {
@@ -723,7 +757,7 @@ namespace CodeSharpenerCryptoAnalyzer
                     context.ReportDiagnostic(diagnsotics);
                 }
             }
-            
+
             TaintedContextDictionary.Add(context.OwningSymbol.ToString(), TaintedValuesDictionary.ToList());
 
             //Clear the Events and Order Dictionary after Analyzing Each Method Block
