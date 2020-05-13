@@ -122,6 +122,7 @@ namespace CodeSharpenerCryptoAnalyzer
             //Register all the syntax nodes that needs to be analyzed            
             context.RegisterCodeBlockStartAction<SyntaxKind>(AnalyzeCodeBlockAction);
             context.RegisterOperationBlockStartAction(AnalyzeUsingStartBlock);
+            context.RegisterSyntaxNodeAction(AnalyzeObjectCreation, SyntaxKind.ObjectCreationExpression);
             context.RegisterSyntaxNodeAction(AnalyzeMethodInvocationNode, SyntaxKind.InvocationExpression);
             context.RegisterSyntaxNodeAction(AnalyzeSimpleAssignmentExpression, SyntaxKind.SimpleAssignmentExpression);
             context.RegisterSyntaxNodeAction(AnalyzeLocalDeclarationStatement, SyntaxKind.LocalDeclarationStatement);
@@ -147,8 +148,6 @@ namespace CodeSharpenerCryptoAnalyzer
             EventOrderContraint = commonUtilities.GetEventOrderList(_cryslSpecificationModel);
 
         }
-
-
 
         /*private static void AnalyzeSymbol(SymbolAnalysisContext context)
         {
@@ -217,6 +216,148 @@ namespace CodeSharpenerCryptoAnalyzer
                 {
                     var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
                     context.ReportDiagnostic(diagnsotics);
+                }
+            }
+        }
+
+        private void AnalyzeObjectCreation(SyntaxNodeAnalysisContext context)
+        {
+            var objectCreationNode = context.Node;
+            var identifierNode = objectCreationNode.ChildNodes().OfType<IdentifierNameSyntax>();
+            ICommonUtilities commonUtilities = _serviceProvider.GetService<ICommonUtilities>();
+            var argumentsList = objectCreationNode.ChildNodes().OfType<ArgumentListSyntax>();
+
+            if (identifierNode.Count() > 0)
+            {
+                var instantiatedMethodIdentifier = identifierNode.FirstOrDefault();
+                string instantiatedMethodType = commonUtilities.GetInvocatorType(context.SemanticModel.GetSymbolInfo(instantiatedMethodIdentifier).Symbol);
+
+                if (instantiatedMethodType.Equals(_cryslSpecificationModel.Spec_Section.Class_Name))
+                {
+                    foreach (var methods in _cryslSpecificationModel.Event_Section.Methods)
+                    {
+
+                        // Check if method signature matches with the method signature defined in events section of the Crysl.
+                        var cryptoMethods = methods.Crypto_Signature.Select(y => y).Where(x => x.Method_Name.ToString().Equals(instantiatedMethodIdentifier.Identifier.Value.ToString()));
+                        if (cryptoMethods.Count() > 0)
+                        {
+                            IEventSectionAnalyzer analyzer = _serviceProvider.GetService<IEventSectionAnalyzer>();
+                            var identifierSymbolInfo = (IMethodSymbol)context.SemanticModel.GetSymbolInfo(objectCreationNode).Symbol;
+
+                            //Check for Valid Events
+                            ValidEvents validEvents = analyzer.AnalyzeMemAccessExprSyntax(instantiatedMethodIdentifier, cryptoMethods, methods, _cryslSpecificationModel, context, identifierSymbolInfo, objectCreationNode.Span, instantiatedMethodType);
+
+                            if (validEvents.IsValidEvent)
+                            {
+                                //Check if any argument value is tainted                                
+                                foreach (var argumentList in argumentsList)
+                                {
+                                    if (argumentList.Arguments != null)
+                                    {
+                                        foreach (var arguments in argumentList.Arguments)
+                                        {
+                                            ArgumentsVisitor argumentsVisitor = new ArgumentsVisitor();
+                                            argumentsVisitor.Visit(arguments);
+                                            var isIdentifierPresent = argumentsVisitor.GetResult();
+                                            if (isIdentifierPresent.IsIdentifierNodePresent)
+                                            {
+                                                var argumentSymbolInfo = context.SemanticModel.GetSymbolInfo(isIdentifierPresent.IdentifierNameSyntax);
+                                                if (argumentSymbolInfo.Symbol != null)
+                                                {
+                                                    if (IsTaintedValueExists(argumentSymbolInfo.Symbol.ContainingSymbol, argumentSymbolInfo.Symbol))
+                                                    {
+                                                        var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, arguments.GetLocation());
+                                                        context.ReportDiagnostic(diagnsotics);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                //Check only if Aggregators are present
+                                if (methods.Aggregator != null)
+                                {
+                                    //Add valid events to Events and Order Dictionary
+                                    AddEventsToDictionary(methods.Aggregator.Aggregator_Name, validEvents, cryptoMethods.FirstOrDefault().Method_Name);
+
+                                    bool isAggConditionSatisfied = commonUtilities.CheckAggregator(ValidEventsDictionary, methods.Aggregator.Aggregators);
+                                    if (!isAggConditionSatisfied)
+                                    {
+                                        var diagnsotics = Diagnostic.Create(EventAggViolationRule, objectCreationNode.GetLocation(), validEvents.PropertyName);
+                                        context.ReportDiagnostic(diagnsotics);
+                                    }
+                                }
+                                //Add single event to dictionary if aggregator not present.
+                                else
+                                {
+                                    AddEventsToDictionary(validEvents.PropertyName, validEvents, cryptoMethods.FirstOrDefault().Method_Name);
+                                }
+
+                                //Iterate throigh parameters if present and check for constraints only if arguments are present
+                                if (validEvents.ValidMethods.Parameters.Count > 0)
+                                {
+                                    //Check for valid constraints
+                                    IConstraintsSectionAnalyzer constraintsSectionAnalyzer = _serviceProvider.GetService<IConstraintsSectionAnalyzer>();
+                                    List<ConstraintsModel> satisfiedConstraintsList = new List<ConstraintsModel>();
+
+                                    satisfiedConstraintsList = constraintsSectionAnalyzer.AnalyzeParameters(argumentsList, validEvents.ValidMethods.Parameters, _cryslSpecificationModel.Constraints_Section.Constraints, context);
+                                    foreach (var constraints in satisfiedConstraintsList)
+                                    {
+                                        if (!constraints.IsConstraintSatisfied)
+                                        {
+                                            string validParameterValues = string.Empty;
+                                            if (constraints.AcceptedParameterValues.Count() != 0)
+                                            {
+                                                validParameterValues = string.Join(", ", constraints.AcceptedParameterValues);
+                                            }
+
+                                            var diagnsotics = Diagnostic.Create(ConstraintAnalyzerViolationRule, objectCreationNode.GetLocation(), constraints.NotSatisfiedParameter, validParameterValues);
+                                            context.ReportDiagnostic(diagnsotics);
+                                        }
+                                    }
+                                    //ReportConstraintsSection(context, satisfiedConstraintsList);
+
+                                    List<AddConstraints> additionalConstraintsCheck = new List<AddConstraints>();
+                                    AdditionalConstraintsDict.TryGetValue(identifierSymbolInfo.ReturnType.ToString(), out additionalConstraintsCheck);
+
+                                    List<AddConstraints> addConstraintsList;
+                                    //Add only if the key is not present in the additional constraints dictionary
+                                    if (additionalConstraintsCheck == null)
+                                    {
+                                        addConstraintsList = new List<AddConstraints>();
+                                        AddConstraints additionalConstraints = new AddConstraints
+                                        {
+                                            EventKey = validEvents.PropertyName,
+                                            EventVariableDeclarator = instantiatedMethodIdentifier.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>().First().Identifier.Text,
+                                            ConstraintsModels = satisfiedConstraintsList
+                                        };
+                                        addConstraintsList.Add(additionalConstraints);
+                                        AdditionalConstraintsDict.Add(identifierSymbolInfo.ReturnType.ToString(), addConstraintsList);
+                                    }
+                                    //If key is present update the dictionary with the variable declarator
+                                    else
+                                    {
+                                        AddConstraints additionalConstraints = new AddConstraints
+                                        {
+                                            EventKey = validEvents.PropertyName,
+                                            EventVariableDeclarator = instantiatedMethodIdentifier.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>().First().Identifier.Text,
+                                            ConstraintsModels = satisfiedConstraintsList
+                                        };
+                                        additionalConstraintsCheck.Add(additionalConstraints);
+                                        AdditionalConstraintsDict[identifierSymbolInfo.ReturnType.ToString()] = additionalConstraintsCheck;
+
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                StringBuilder validEventsSig = commonUtilities.GetValidMethodSignatures(methods);
+                                var diagnsotic = Diagnostic.Create(EventViolationRule, objectCreationNode.GetLocation(), instantiatedMethodIdentifier.Identifier.Text, validEventsSig.ToString());
+                                context.ReportDiagnostic(diagnsotic);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -311,7 +452,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                             if (constraintsList.Count() != 0)
                                             {
 
-                                                satisfiedConstraintsList = constraintsSectionAnalyzer.AnalyzeParameters(argumentsList, validEvents.ValidMethods.Parameters, _cryslSpecificationModel.Constraints_Section.Constraints);
+                                                satisfiedConstraintsList = constraintsSectionAnalyzer.AnalyzeParameters(argumentsList, validEvents.ValidMethods.Parameters, _cryslSpecificationModel.Constraints_Section.Constraints, context);
                                                 foreach (var constraints in satisfiedConstraintsList)
                                                 {
                                                     if (!constraints.IsConstraintSatisfied)
@@ -392,25 +533,53 @@ namespace CodeSharpenerCryptoAnalyzer
                 for (int i = 0; i < arguments.Arguments.Count; i++)
                 {
                     var simpleMemAccessExpr = arguments.Arguments[i].ChildNodes().OfType<MemberAccessExpressionSyntax>();
-                    foreach (var memAccessExpr in simpleMemAccessExpr)
+                    if (simpleMemAccessExpr.Count() > 0)
                     {
-                        var argumentSymbol = context.SemanticModel.GetSymbolInfo(memAccessExpr).Symbol;
-                        if (argumentSymbol != null)
+                        foreach (var memAccessExpr in simpleMemAccessExpr)
                         {
-                            if (IsTaintedValueExists(context.ContainingSymbol, argumentSymbol))
+                            var argumentSymbol = context.SemanticModel.GetSymbolInfo(memAccessExpr).Symbol;
+                            if (argumentSymbol != null)
                             {
-                                var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, memAccessExpr.GetLocation());
-                                context.ReportDiagnostic(diagnsotics);
-                                if (invExprSymbolInfo != null)
+                                if (IsTaintedValueExists(context.ContainingSymbol, argumentSymbol))
                                 {
-                                    if (!IsTaintedValueExists(invExprSymbolInfo.ContainingSymbol, invExprSymbolInfo.Parameters[i]))
+                                    var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, memAccessExpr.GetLocation());
+                                    context.ReportDiagnostic(diagnsotics);
+                                    if (invExprSymbolInfo != null)
                                     {
-                                        TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(invExprSymbolInfo, invExprSymbolInfo.Parameters[i]));
+                                        if (!IsTaintedValueExists(invExprSymbolInfo.ContainingSymbol, invExprSymbolInfo.Parameters[i]))
+                                        {
+                                            TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(invExprSymbolInfo, invExprSymbolInfo.Parameters[i]));
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    else
+                    {
+                        var identifierNameSyntax = arguments.Arguments[i].ChildNodes().OfType<IdentifierNameSyntax>();
+                        foreach(var identifierNameNode in identifierNameSyntax)
+                        {
+                            var identifierSymbolInfo = context.SemanticModel.GetSymbolInfo(identifierNameNode).Symbol;
+                            if(identifierSymbolInfo != null)
+                            {
+                                if(IsTaintedValueExists(context.ContainingSymbol, identifierSymbolInfo))
+                                {
+                                    var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, identifierNameNode.GetLocation());
+                                    context.ReportDiagnostic(diagnsotics);
+                                    if(invExprSymbolInfo != null)
+                                    {
+                                        if(!IsTaintedValueExists(invExprSymbolInfo.ContainingSymbol, invExprSymbolInfo.Parameters[i]))
+                                        {
+                                            TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(invExprSymbolInfo, invExprSymbolInfo.Parameters[i]));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                    }
+
 
                 }
             }
@@ -536,14 +705,20 @@ namespace CodeSharpenerCryptoAnalyzer
                                     //Report Diagnostics as not a Valid Event
                                 }
                                 //Check if tainted variables are santized
-
                                 if (IsTaintedValueExists(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo))
                                 {
                                     if (rightExprSymbolInfo != null)
                                     {
                                         if (!IsTaintedValueExists(rightExprSymbolInfo.ContainingSymbol, rightExprSymbolInfo))
                                         {
-                                            TaintedValuesDictionary.Remove(new KeyValuePair<ISymbol, ISymbol>(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo));
+                                            if (TaintedValuesDictionary.Count != 0)
+                                            {
+                                                TaintedValuesDictionary.Remove(new KeyValuePair<ISymbol, ISymbol>(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo));
+                                            }
+                                            else
+                                            {
+                                                SanitizeTaintValue(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo);
+                                            }
                                         }
                                     }
                                 }
@@ -627,6 +802,28 @@ namespace CodeSharpenerCryptoAnalyzer
                 }
             }
             return false;
+        }
+
+        private static void SanitizeTaintValue(ISymbol containingMethod, ISymbol nodeInfo)
+        {
+            List<KeyValuePair<ISymbol, ISymbol>> sanitizedValues = new List<KeyValuePair<ISymbol, ISymbol>>();
+            foreach(var taintedValueDictionary in TaintedContextDictionary)
+            {
+                foreach(var taintedValue in taintedValueDictionary.Value)
+                {
+                    bool taintedValuePresent = (taintedValue.Key.ToString().Equals(containingMethod.ToString()) && taintedValue.Value.Kind.Equals(nodeInfo.Kind) && taintedValue.Value.ToString().Equals(nodeInfo.ToString()) && taintedValue.Value.Name.ToString().Equals(nodeInfo.Name.ToString())) ? true : false;
+                    if(taintedValuePresent)
+                    {
+                        sanitizedValues.Add(new KeyValuePair<ISymbol, ISymbol>(taintedValue.Key, taintedValue.Value));
+                        //taintedValueDictionary.Value.Remove(new KeyValuePair<ISymbol, ISymbol>(taintedValue.Key, taintedValue.Value));
+                    }
+                }
+                //Remove all the sanitized variables
+                foreach(var sanitizedVariables in sanitizedValues)
+                {
+                    taintedValueDictionary.Value.Remove(sanitizedVariables);
+                }
+            }
         }
 
         private static bool IsMethodSignatureSame(IMethodSymbol taintedMethod, IMethodSymbol currentMethod)

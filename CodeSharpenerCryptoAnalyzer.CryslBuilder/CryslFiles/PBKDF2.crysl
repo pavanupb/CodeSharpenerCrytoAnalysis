@@ -1,0 +1,40 @@
+﻿SPEC System.Security.Cryptography.Rfc2898DeriveBytes
+
+OBJECTS
+	System.Security.Cryptography.HashAlgorithmName algorithmName;
+	System.String passwordString;
+	System.String algName;
+	System.String algHashName;
+	byte passwordByteArray;
+	byte saltByteArray;
+	byte rgbIV;
+	int saltSize;
+	int keySize;
+	int iterations;
+	int cb;
+
+EVENTS
+	d1: Rfc2898DeriveBytes(passwordString, saltSize, iterations, algorithmName);
+	d2: Rfc2898DeriveBytes(passwordByteArray, saltByteArray, iterations, algorithmName);
+	DeriveBytes := d1 | d2;
+
+	g1: GetBytes(cb);
+	g2: CryptDeriveKey(algName, algHashName, keySize, rgbIV);
+	GetBytes := g1;
+
+	Dispose: Dispose();
+
+ ORDER
+	DeriveBytes, GetBytes, Dispose
+
+ CONSTRAINTS
+	saltSize in {32, 64};
+	iterations in {50000};
+	algorithmName in {"SHA256", "SHA384", "SHA512"};
+	cb in {32, 64};
+
+ ENSURES
+	generatedHash[passwordString, passwordByteArray, algorithmName];
+
+ 
+

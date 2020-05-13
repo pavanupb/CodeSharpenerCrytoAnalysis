@@ -34,7 +34,7 @@ ORDER
 
 CONSTRAINTS
 		algorithm in {"AES", "AesCryptoServiceProvider", "System.Security.Cryptography.AesCryptoServiceProvider", "AesManaged", "System.Security.Cryptography.AesManaged", "Rijndael"};		
-		keySize in {128, 256};
+		algorithm in {"AES"} => keySize in {128, 256};
 		cipherMode in {"CBC"};
 		blockSize in {128};
 		paddingMode in {"PKCS7", "ISO10126"};

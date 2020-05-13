@@ -2,6 +2,7 @@
 using CryslData;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -20,20 +21,50 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
         /// <param name="cryslParameters"></param>
         /// <param name="constraintsList"></param>
         /// <returns></returns>
-        public List<ConstraintsModel> AnalyzeParameters(IEnumerable<ArgumentListSyntax> argumentListSyntax, ICollection<ArgumentTypes> cryslParameters, ICollection<Constraints> constraintsList)
+        public List<ConstraintsModel> AnalyzeParameters(IEnumerable<ArgumentListSyntax> argumentListSyntax, ICollection<ArgumentTypes> cryslParameters, ICollection<Constraints> constraintsList, SyntaxNodeAnalysisContext context)
         {
             List<ConstraintsModel> constraintsModel = new List<ConstraintsModel>();
-            foreach(var argument in argumentListSyntax)
+            foreach (var argument in argumentListSyntax)
             {
-                var literalExpressionSyntax = argument.ChildNodes().OfType<ArgumentSyntax>().FirstOrDefault().ChildNodes().OfType<LiteralExpressionSyntax>();
-                foreach(var parameter in cryslParameters)
+                if (!argument.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.ArgumentList))
                 {
-                    var parameterConstraints = constraintsList.Select(x => x).Where(y => y.Object_Varname.ToString().Equals(parameter.Argument));
-                    constraintsModel.Add(IsValidLiteralExpression(literalExpressionSyntax, parameterConstraints));
-                }                
+                    var literalExpressionSyntax = argument.ChildNodes().OfType<ArgumentSyntax>().FirstOrDefault().ChildNodes().OfType<LiteralExpressionSyntax>();
+                    foreach (var parameter in cryslParameters)
+                    {
+                        var parameterConstraints = constraintsList.Select(x => x).Where(y => y.Object_Varname.ToString().Equals(parameter.Argument));
+                        constraintsModel.Add(IsValidLiteralExpression(literalExpressionSyntax, parameterConstraints));
+                    }
+                }
+                else
+                {
+                    var cryslParametersArray = cryslParameters.ToArray();
+                    for (int i = 0; i < argument.Arguments.Count; i++)
+                    {
+                        var literalExpressionSyntax = argument.Arguments[i].ChildNodes().OfType<LiteralExpressionSyntax>();
+                        var memberAccessExpressionSyntax = argument.Arguments[i].ChildNodes().OfType<MemberAccessExpressionSyntax>();
+                        if (literalExpressionSyntax.Count() > 0)
+                        {
+                            var parameterConstraints = constraintsList.Select(x => x).Where(y => y.Object_Varname.ToString().Equals(cryslParametersArray[i].Argument));
+                            constraintsModel.Add(IsValidLiteralExpression(literalExpressionSyntax, parameterConstraints));
+                        }
+                        else if (memberAccessExpressionSyntax.Count() > 0)
+                        {
+                            var identifierSyntax = memberAccessExpressionSyntax.First().ChildNodes().OfType<IdentifierNameSyntax>();
+                            var invocatorSyntaxNode = identifierSyntax.FirstOrDefault();
+                            var invokedSyntaxNode = identifierSyntax.LastOrDefault();
+
+                            var invocatorSymbolInfo = context.SemanticModel.GetSymbolInfo(invocatorSyntaxNode);
+                            var invokedSymbolInfo = context.SemanticModel.GetSymbolInfo(invokedSyntaxNode);
+
+                            var parameterConstraints = constraintsList.Select(x => x).Where(y => y.Object_Varname.ToString().Equals(cryslParametersArray[i].Argument));
+                            constraintsModel.Add(IsValidMemberAccessExpression(invokedSymbolInfo.Symbol, parameterConstraints));
+
+                        }
+                    }
+                }
             }
 
-            return constraintsModel ;
+            return constraintsModel;
 
         }
 
@@ -129,7 +160,7 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
         {
             ConstraintsModel constraintsModel = new ConstraintsModel();
             List<AdditionalConstraints> additionalConstraintsList = new List<AdditionalConstraints>();
-            foreach(var literalExpression in literalExpressionSyntax)
+            foreach (var literalExpression in literalExpressionSyntax)
             {
                 var primaryConstraintSatisfied = parameterConstraints.Select(x => x).Where(y => (y.Additional_constraints == null) && y.Constraints_List.Contains(literalExpression.Token.Value.ToString()));
                 if (primaryConstraintSatisfied.Count() != 0)
@@ -137,7 +168,7 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
                     constraintsModel.IsConstraintSatisfied = true;
                     constraintsModel.SatisfiedConstraint = literalExpression.Token.Value.ToString();
                     var literalConstraintsList = parameterConstraints.Select(x => x).Where(y => (y.Constraints_List.Contains(literalExpression.Token.Value.ToString())) && y.Additional_constraints != null);
-                    if(literalConstraintsList.Count() != 0)
+                    if (literalConstraintsList.Count() != 0)
                     {
                         additionalConstraintsList = literalConstraintsList.Select(x => x.Additional_constraints).ToList();
                         constraintsModel.IsAdditionalConstraints = true;
@@ -146,12 +177,45 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
                 }
                 else
                 {
+                    var acceptedParameters = parameterConstraints.Select(x => x).Where(y => y.Additional_constraints == null).FirstOrDefault();
                     constraintsModel.IsConstraintSatisfied = false;
                     constraintsModel.NotSatisfiedParameter = literalExpression.Token.Value.ToString();
+                    constraintsModel.AcceptedParameterValues = acceptedParameters.Constraints_List;
                     return constraintsModel;
-                }                
+                }
             }
             return constraintsModel;
-        }        
+        }
+
+        private ConstraintsModel IsValidMemberAccessExpression(ISymbol invokedSymbolInfo, IEnumerable<Constraints> parameterConstraints)
+        {
+            ConstraintsModel constraintsModel = new ConstraintsModel();
+            List<AdditionalConstraints> additionalConstraintsList = new List<AdditionalConstraints>();
+
+            var primaryConstraintSatisfied = parameterConstraints.Select(x => x).Where(y => (y.Additional_constraints == null) && y.Constraints_List.Contains(invokedSymbolInfo.Name.ToString()));
+            
+            if (primaryConstraintSatisfied.Count() != 0)
+            {
+                constraintsModel.IsConstraintSatisfied = true;
+                constraintsModel.SatisfiedConstraint = invokedSymbolInfo.Name.ToString();
+                var literalConstraintsList = parameterConstraints.Select(x => x).Where(y => (y.Constraints_List.Contains(invokedSymbolInfo.ToString())) && y.Additional_constraints != null);
+                if (literalConstraintsList.Count() != 0)
+                {
+                    additionalConstraintsList = literalConstraintsList.Select(x => x.Additional_constraints).ToList();
+                    constraintsModel.IsAdditionalConstraints = true;
+                    constraintsModel.AdditionalConstraints = additionalConstraintsList;
+                }
+            }
+            else
+            {
+                var acceptedParameters = parameterConstraints.Select(x => x).Where(y => y.Additional_constraints == null).FirstOrDefault();
+                constraintsModel.IsConstraintSatisfied = false;
+                constraintsModel.NotSatisfiedParameter = invokedSymbolInfo.Name.ToString();
+                constraintsModel.AcceptedParameterValues = acceptedParameters.Constraints_List;
+                return constraintsModel;
+            }
+
+            return constraintsModel;
+        }
     }
 }

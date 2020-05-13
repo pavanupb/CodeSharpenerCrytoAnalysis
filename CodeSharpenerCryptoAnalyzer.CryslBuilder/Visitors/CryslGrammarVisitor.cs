@@ -30,7 +30,7 @@ namespace CryslParser.Visitors
         {
             SectionSpec specSection = new SectionSpec();
             string sectionName = context.SPECSECTIONNAME().GetText();
-            string specSectionValue = context.TYPE().GetText();
+            string specSectionValue = context.VARNAME().GetText();
 
             specSection.Crysl_Section = sectionName;
             specSection.Class_Name = specSectionValue;
@@ -202,8 +202,8 @@ namespace CryslParser.Visitors
 
         public override object VisitTypeValue(CryslGrammarParser.TypeValueContext context)
         {
-            string typeValueType = context.TYPE().GetText();
-            string varName = context.VARNAME().GetText();
+            string typeValueType = context.VARNAME().First().GetText();
+            string varName = context.VARNAME().Last().GetText();
             ObjectsDeclaration objectDeclaration = new ObjectsDeclaration();
             objectDeclaration.Object_type = typeValueType;
             objectDeclaration.Var_name = varName;

@@ -47,6 +47,7 @@ namespace CodeSharpenerCryptoAnalyzer.Visitors
                     IsStringLiteralExpressionPresent = true;
                 }
             }
+            base.VisitEqualsValueClause(node);
         }
 
         public ByteArrayDeclarationResult GetByteArrayResult()

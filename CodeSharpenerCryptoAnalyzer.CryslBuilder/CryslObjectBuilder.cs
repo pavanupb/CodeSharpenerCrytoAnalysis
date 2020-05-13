@@ -31,7 +31,7 @@ namespace CodeSharpenerCryptoAnalyzer.CryslBuilder
         {
             /*string[] cryslFilePath = { Directory.GetParent(Directory.GetCurrentDirectory()).Parent.Parent.Parent.Parent.FullName, @".//CryslParser//CryslObjectBuilder//CryslFiles//AES.crysl" };            
             string text = System.IO.File.ReadAllText(Path.Combine(cryslFilePath));*/
-            string text = System.IO.File.ReadAllText("D:\\Master Thesis\\CodeSharpenerCrytoAnalysis\\CodeSharpenerCryptoAnalyzer.CryslBuilder\\CryslFiles\\KeyedHashAlgorithms.crysl");
+            string text = System.IO.File.ReadAllText("D:\\Master Thesis\\CodeSharpenerCrytoAnalysis\\CodeSharpenerCryptoAnalyzer.CryslBuilder\\CryslFiles\\SymmetricAlgorithms.crysl");
             ICharStream stream = CharStreams.fromstring(text);
             CryslResult cryslResult = new CryslResult();
             CryslGrammarLexer lexer = new CryslGrammarLexer(stream);

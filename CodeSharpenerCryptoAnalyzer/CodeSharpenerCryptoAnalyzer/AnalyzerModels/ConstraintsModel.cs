@@ -12,5 +12,6 @@ namespace CodeSharpenerCryptoAnalysis.AnalyzerModels
         public List<AdditionalConstraints> AdditionalConstraints { get; set; }
         public string SatisfiedConstraint { get; set; }
         public string NotSatisfiedParameter { get; set; }
+        public ICollection<string> AcceptedParameterValues { get; set; }
     }
 }

@@ -23,7 +23,16 @@ namespace CodeSharpenerCryptoAnalzer.Common
             bool isMethodInEvents = false;
             if (methodSymbol != null)
             {
-                if (cryptoMethod.Method_Name.Equals(methodSymbol.Name) && !cryptoMethod.Is_property)
+                string methodSymbolName = string.Empty;
+                if(methodSymbol.MethodKind == MethodKind.Constructor)
+                {
+                    methodSymbolName = methodSymbol.ReceiverType.Name;
+                }
+                else
+                {
+                    methodSymbolName = methodSymbol.Name;
+                }
+                if (cryptoMethod.Method_Name.Equals(methodSymbolName) && !cryptoMethod.Is_property)
                 {
                     if (cryptoMethod.Argument_types.Count == methodSymbol.Parameters.Length)
                     {
@@ -254,6 +263,10 @@ namespace CodeSharpenerCryptoAnalzer.Common
         private static bool IsArgumentValid(ArgumentTypes argument, IParameterSymbol methodSymbol, ICollection<ObjectsDeclaration> objectsDeclarations)
         {
             string objectType = GetTypeString(argument.Argument, objectsDeclarations);
+            if(objectType.Equals("int"))
+            {
+                objectType = "System.Int32";
+            }
             string methodSymbolType = string.Empty;
             if (methodSymbol.Type.ContainingNamespace != null)
             {
