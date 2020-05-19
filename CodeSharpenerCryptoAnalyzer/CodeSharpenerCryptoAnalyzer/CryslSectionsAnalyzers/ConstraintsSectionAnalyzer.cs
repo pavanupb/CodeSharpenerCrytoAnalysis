@@ -32,7 +32,10 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
                     foreach (var parameter in cryslParameters)
                     {
                         var parameterConstraints = constraintsList.Select(x => x).Where(y => y.Object_Varname.ToString().Equals(parameter.Argument));
-                        constraintsModel.Add(IsValidLiteralExpression(literalExpressionSyntax, parameterConstraints));
+                        if (parameterConstraints.Count() != 0)
+                        {
+                            constraintsModel.Add(IsValidLiteralExpression(literalExpressionSyntax, parameterConstraints));
+                        }
                     }
                 }
                 else
@@ -45,7 +48,10 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
                         if (literalExpressionSyntax.Count() > 0)
                         {
                             var parameterConstraints = constraintsList.Select(x => x).Where(y => y.Object_Varname.ToString().Equals(cryslParametersArray[i].Argument));
-                            constraintsModel.Add(IsValidLiteralExpression(literalExpressionSyntax, parameterConstraints));
+                            if (parameterConstraints.Count() != 0)
+                            {
+                                constraintsModel.Add(IsValidLiteralExpression(literalExpressionSyntax, parameterConstraints));
+                            }
                         }
                         else if (memberAccessExpressionSyntax.Count() > 0)
                         {
@@ -57,7 +63,10 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
                             var invokedSymbolInfo = context.SemanticModel.GetSymbolInfo(invokedSyntaxNode);
 
                             var parameterConstraints = constraintsList.Select(x => x).Where(y => y.Object_Varname.ToString().Equals(cryslParametersArray[i].Argument));
-                            constraintsModel.Add(IsValidMemberAccessExpression(invokedSymbolInfo.Symbol, parameterConstraints));
+                            if (parameterConstraints.Count() != 0)
+                            {
+                                constraintsModel.Add(IsValidMemberAccessExpression(invokedSymbolInfo.Symbol, parameterConstraints));
+                            }
 
                         }
                     }
@@ -111,9 +120,7 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
                                         isAdditionalConstraintSatisfied = false;
                                         return isAdditionalConstraintSatisfied;
                                     }
-
                                 }
-
                             }
                         }
 

@@ -14,33 +14,43 @@ namespace CodeSharpenerCryptoAnalyzer.Visitors
     {
         private bool IsArrayInitializerPresent;
         private bool IsStringLiteralExpressionPresent;
+        private bool IsIdentifierNamePresent;
+        private bool IsMemberAccessExpressionPresent;
         private VariableDeclaratorSyntax variableDeclarator;
+        private IdentifierNameSyntax identifierNode;
 
         public LocalDeclarationStatementVisitor()
         {
             IsArrayInitializerPresent = false;
             IsStringLiteralExpressionPresent = false;
+            IsMemberAccessExpressionPresent = false;
         }
 
         public override void VisitVariableDeclarator(VariableDeclaratorSyntax node)
         {
             variableDeclarator = node;
             base.VisitVariableDeclarator(node);
-        }          
+        }
+
+        public override void VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
+        {
+            //Do not call the base visitor as member access expressions should not be tainted in local declaration statement syntax types
+            IsMemberAccessExpressionPresent = true;
+        }
 
         public override void VisitInitializerExpression(InitializerExpressionSyntax node)
         {
-            if(node.Kind().Equals(SyntaxKind.ArrayInitializerExpression))
+            if (node.Kind().Equals(SyntaxKind.ArrayInitializerExpression))
             {
                 IsArrayInitializerPresent = true;
             }
-            
-        }        
+
+        }
 
         public override void VisitEqualsValueClause(EqualsValueClauseSyntax node)
         {
             var stringHardCodedValue = node.ChildNodes().OfType<LiteralExpressionSyntax>();
-            if(stringHardCodedValue.Count() != 0)
+            if (stringHardCodedValue.Count() != 0)
             {
                 if (stringHardCodedValue.First().Kind().Equals(SyntaxKind.StringLiteralExpression))
                 {
@@ -48,6 +58,15 @@ namespace CodeSharpenerCryptoAnalyzer.Visitors
                 }
             }
             base.VisitEqualsValueClause(node);
+        }
+
+        public override void VisitIdentifierName(IdentifierNameSyntax node)
+        {
+            if (!IsMemberAccessExpressionPresent)
+            {
+                IsIdentifierNamePresent = true;
+                identifierNode = node;
+            }
         }
 
         public ByteArrayDeclarationResult GetByteArrayResult()
@@ -70,5 +89,17 @@ namespace CodeSharpenerCryptoAnalyzer.Visitors
             };
             return stringLiteralDeclarationResult;
         }
-    }
+
+        public IdentifierNameSyntaxResult GetIdentifierNameSyntaxResult()
+        {
+            IdentifierNameSyntaxResult identifierNameSyntaxResult = new IdentifierNameSyntaxResult
+            {
+                IsIdentifierPresent = IsIdentifierNamePresent,
+                IdentifierNameSyntaxNode = identifierNode,
+                VariableDeclarator = variableDeclarator
+            };
+
+            return identifierNameSyntaxResult;
+        }
+    }        
 }
