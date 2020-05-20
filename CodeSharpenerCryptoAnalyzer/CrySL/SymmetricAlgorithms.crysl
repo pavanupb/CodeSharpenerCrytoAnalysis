@@ -1,0 +1,44 @@
+﻿SPEC System.Security.Cryptography.SymmetricAlgorithm
+
+OBJECTS
+	System.Security.Cryptography.CipherMode cipherMode;	
+	System.Security.Cryptography.PaddingMode paddingMode;
+	System.Security.Cryptography.ICryptoTransform cryptoTransform;
+	System.String algorithm;
+	int keySize;
+	int blockSize;
+	byte key;
+	byte IV;
+	
+
+EVENTS
+	c1: Create();
+	c2: Create(algorithm);
+	Create := c1 | c2 ;	
+
+	s1: keySize = KeySize;
+	s2: cipherMode = Mode;
+	s3: blockSize = BlockSize;
+	s4: paddingMode = Padding;
+
+	CreateEncryptor: cryptoTransform = CreateEncryptor(key, IV);
+
+	CreateDecryptor: cryptoTransform = CreateDecryptor(key, IV);
+
+	Dispose: Dispose();
+
+	
+	
+ORDER
+	Create, s1?, s2?, s3?, s4?, CreateEncryptor?, CreateDecryptor?, Dispose
+
+CONSTRAINTS
+		algorithm in {"AES", "AesCryptoServiceProvider", "System.Security.Cryptography.AesCryptoServiceProvider", "AesManaged", "System.Security.Cryptography.AesManaged", "Rijndael"};		
+		keySize in {128, 256};
+		cipherMode in {"CBC"};
+		blockSize in {128};
+		paddingMode in {"PKCS7", "ISO10126"};
+		
+ENSURES
+	generatedKey[key, IV, algorithm];
+

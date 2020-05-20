@@ -7,6 +7,6 @@ namespace CodeSharpenerCryptoAnalyzer.CryslBuilder
 {
     public interface ICryslObjectBuilder
     {
-        CryslResult CryslToCSharpBuilder();
+        CryslResult CryslToCSharpBuilder(string cryslPath);
     }
 }

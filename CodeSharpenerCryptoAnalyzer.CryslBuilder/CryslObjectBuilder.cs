@@ -9,6 +9,8 @@ using FluentValidation;
 using FluentValidation.Results;
 using Microsoft.Extensions.DependencyInjection;
 using System;
+using System.IO;
+using System.Collections.Generic;
 
 namespace CodeSharpenerCryptoAnalyzer.CryslBuilder
 {
@@ -16,24 +18,65 @@ namespace CodeSharpenerCryptoAnalyzer.CryslBuilder
     {
         private ServiceProvider serviceProvider { get; set; }
 
+        private Dictionary<string, string> cryslFiles = new Dictionary<string, string>();
+
+        private Object _lock;
+
         public CryslObjectBuilder()
         {
             var services = new ServiceCollection();
             services.AddTransient<ICryslGrammarVisitor<object>, CryslGrammarVisitor>();
             services.AddTransient<IValidator, CryslCSharpObjectValidator>();
+            services.AddTransient<ICryslMD5Hash, CryslMD5Hash>();
             serviceProvider = services.BuildServiceProvider();
+
+            if(_lock == null)
+            {
+                _lock = new object();
+            }            
         }
 
         /// <summary>
         /// 
         /// </summary>
-        public CryslResult CryslToCSharpBuilder()
+        public CryslResult CryslToCSharpBuilder(string cryslPath)
         {
+            CryslResult cryslResult = new CryslResult();
             /*string[] cryslFilePath = { Directory.GetParent(Directory.GetCurrentDirectory()).Parent.Parent.Parent.Parent.FullName, @".//CryslParser//CryslObjectBuilder//CryslFiles//AES.crysl" };            
             string text = System.IO.File.ReadAllText(Path.Combine(cryslFilePath));*/
-            string text = System.IO.File.ReadAllText("D:\\Master Thesis\\CodeSharpenerCrytoAnalysis\\CodeSharpenerCryptoAnalyzer.CryslBuilder\\CryslFiles\\SymmetricAlgorithms.crysl");
-            ICharStream stream = CharStreams.fromstring(text);
-            CryslResult cryslResult = new CryslResult();
+            //string text = System.IO.File.ReadAllText("D:\\Master Thesis\\CodeSharpenerCrytoAnalysis\\CodeSharpenerCryptoAnalyzer.CryslBuilder\\CryslFiles\\SymmetricAlgorithms.crysl");
+            string text = System.IO.File.ReadAllText(cryslPath);
+
+            //Check if the crysl file has already been parsed
+            if(!cryslFiles.ContainsKey(cryslPath))
+            {
+                lock (_lock)
+                {
+                    ICryslMD5Hash cryslMD5Hash = serviceProvider.GetService<ICryslMD5Hash>();
+                    string cryslContentHashCode = cryslMD5Hash.GetHashCode(text);
+                    cryslFiles.Add(cryslPath, cryslContentHashCode);
+                }   
+            }
+            //Check if the crysl file has been changed from the last known read
+            else
+            {
+                ICryslMD5Hash cryslMD5Hash = serviceProvider.GetService<ICryslMD5Hash>();
+                string cryslContentHashCode = cryslMD5Hash.GetHashCode(text);
+                string currentCryslContentHashCode = cryslFiles[cryslPath];
+
+                if(cryslContentHashCode.Equals(currentCryslContentHashCode))
+                {
+                    cryslResult.IsFileChanged = false;
+                    return cryslResult;
+                }
+                else
+                {
+                    cryslFiles.Remove(cryslPath);
+                    cryslFiles.Add(cryslPath, cryslContentHashCode);
+                }
+            }
+                             
+            ICharStream stream = CharStreams.fromstring(text);            
             CryslGrammarLexer lexer = new CryslGrammarLexer(stream);
             CommonTokenStream tokens = new CommonTokenStream(lexer);
             CryslGrammarParser parser = new CryslGrammarParser(tokens);
@@ -49,6 +92,7 @@ namespace CodeSharpenerCryptoAnalyzer.CryslBuilder
                 ICryslGrammarVisitor<object> visitor = serviceProvider.GetService<ICryslGrammarVisitor<object>>();
                 CryslJsonModel result = (CryslJsonModel)visitor.Visit(tree);
                 cryslResult.CryslModel = result;
+                cryslResult.IsFileChanged = true;
 
                 IValidator objectValidator = serviceProvider.GetService<IValidator>();
                 ValidationResult validationResult = objectValidator.Validate(result);

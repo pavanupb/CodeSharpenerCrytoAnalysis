@@ -13,5 +13,6 @@ namespace CryslCSharpObjectBuilder.Models.CSharpModels
         public bool IsValid { get; set; }
         public IList<ValidationFailure> ValidationErrors { get; set; }
         public string FilePath { get; set; }
+        public bool IsFileChanged { get; set; }
     }
 }

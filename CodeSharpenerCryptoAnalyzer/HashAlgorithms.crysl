@@ -1,0 +1,29 @@
+﻿SPEC System.Security.Cryptography.HashAlgorithm
+
+OBJECTS
+	System.String algorithm;
+	byte inputByteArray;
+	int offset;
+	int count;
+	System.Security.Cryptography.CryptoStream cryptoStream;
+
+EVENTS
+	c1: ComputeHash(inputByteArray);
+	c2: ComputeHash(inputByteArray, offset, count);
+	c3: ComputeHash(cryptoStream);
+	ComputeHash := c1 | c2 | c3;
+
+	Create: Create(algorithm);
+
+	Dispose: Dispose();
+
+ORDER
+	Create, ComputeHash, Dispose
+
+CONSTRAINTS
+	algorithm in {"SHA256", "SHA384", "SHA512"};
+
+ENSURES
+	generateHash[inputByteArray, cryptoStream, algorithm];
+
+	
