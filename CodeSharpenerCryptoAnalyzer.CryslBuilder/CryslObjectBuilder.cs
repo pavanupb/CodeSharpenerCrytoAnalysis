@@ -18,9 +18,7 @@ namespace CodeSharpenerCryptoAnalyzer.CryslBuilder
     {
         private ServiceProvider serviceProvider { get; set; }
 
-        private Dictionary<string, string> cryslFiles = new Dictionary<string, string>();
-
-        private Object _lock;
+        private Dictionary<string, string> cryslFiles = new Dictionary<string, string>();        
 
         public CryslObjectBuilder()
         {
@@ -28,12 +26,7 @@ namespace CodeSharpenerCryptoAnalyzer.CryslBuilder
             services.AddTransient<ICryslGrammarVisitor<object>, CryslGrammarVisitor>();
             services.AddTransient<IValidator, CryslCSharpObjectValidator>();
             services.AddTransient<ICryslMD5Hash, CryslMD5Hash>();
-            serviceProvider = services.BuildServiceProvider();
-
-            if(_lock == null)
-            {
-                _lock = new object();
-            }            
+            serviceProvider = services.BuildServiceProvider();                  
         }
 
         /// <summary>
@@ -50,7 +43,7 @@ namespace CodeSharpenerCryptoAnalyzer.CryslBuilder
             //Check if the crysl file has already been parsed
             if(!cryslFiles.ContainsKey(cryslPath))
             {
-                lock (_lock)
+                lock (cryslFiles)
                 {
                     ICryslMD5Hash cryslMD5Hash = serviceProvider.GetService<ICryslMD5Hash>();
                     string cryslContentHashCode = cryslMD5Hash.GetHashCode(text);
@@ -71,8 +64,11 @@ namespace CodeSharpenerCryptoAnalyzer.CryslBuilder
                 }
                 else
                 {
-                    cryslFiles.Remove(cryslPath);
-                    cryslFiles.Add(cryslPath, cryslContentHashCode);
+                    lock (cryslFiles)
+                    {
+                        cryslFiles.Remove(cryslPath);
+                        cryslFiles.Add(cryslPath, cryslContentHashCode);
+                    }
                 }
             }
                              
