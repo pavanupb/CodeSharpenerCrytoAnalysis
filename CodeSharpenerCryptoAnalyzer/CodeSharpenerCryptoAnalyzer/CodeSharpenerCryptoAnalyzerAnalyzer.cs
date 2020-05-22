@@ -71,7 +71,7 @@ namespace CodeSharpenerCryptoAnalyzer
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get { return ImmutableArray.Create(EventViolationRule, EventAggViolationRule, ConstraintAnalyzerViolationRule, OrderAnalyzerViolationRule, HardCodedCheckViolationRule, DerivedTypeRule); } }
 
 
-        
+
         private static Dictionary<string, CryslJsonModel> _cryslSpecificationModel;
         private static ServiceProvider _serviceProvider { get; set; }
 
@@ -85,7 +85,7 @@ namespace CodeSharpenerCryptoAnalyzer
         private static Dictionary<string, List<MethodSignatureModel>> ValidEventsDictionary;
 
         //Dictionary of all analyzed events
-        private static Dictionary<string, Dictionary<string, string>> EventsOrderDictionary;
+        private static Dictionary<string, Dictionary<string, List<KeyValuePair<string, string>>>> EventsOrderDictionary;
 
         private static List<KeyValuePair<ISymbol, ISymbol>> TaintedValuesDictionary;
 
@@ -95,7 +95,7 @@ namespace CodeSharpenerCryptoAnalyzer
 
         private static List<CryslJsonModel> CryslSectionList;
 
-       
+
 
         public CodeSharpenerCryptoAnalyzerAnalyzer()
         {
@@ -122,7 +122,7 @@ namespace CodeSharpenerCryptoAnalyzer
             string[] cryslFiles = Directory.GetFiles(cryslPath, "*.crysl");
 
             foreach (var cryslFile in cryslFiles)
-            {                
+            {
                 CryslResult cryslCompilationModel = cSharpObjectBuilder.CryslToCSharpBuilder(cryslFile);
                 if (cryslCompilationModel.IsValid && !_cryslSpecificationModel.Values.Contains(cryslCompilationModel.CryslModel))
                 {
@@ -140,11 +140,11 @@ namespace CodeSharpenerCryptoAnalyzer
                         {
                             _cryslSpecificationModel.Add(cryslFile, cryslCompilationModel.CryslModel);
                         }
-                    }                    
+                    }
                 }
             }
             InitializeContext(context);
-        }        
+        }
 
         public void InitializeContext(AnalysisContext context)
         {
@@ -161,12 +161,12 @@ namespace CodeSharpenerCryptoAnalyzer
             //All global assignements to analyzer goes below           
             AdditionalConstraintsDict = new Dictionary<string, List<AddConstraints>>();
             ValidEventsDictionary = new Dictionary<string, List<MethodSignatureModel>>();
-            EventsOrderDictionary = new Dictionary<string, Dictionary<string, string>>();
-            TaintedValuesDictionary = new List<KeyValuePair<ISymbol, ISymbol>>();            
+            EventsOrderDictionary = new Dictionary<string, Dictionary<string, List<KeyValuePair<string, string>>>>();
+            TaintedValuesDictionary = new List<KeyValuePair<ISymbol, ISymbol>>();
             if (TaintedContextDictionary == null)
             {
                 TaintedContextDictionary = new Dictionary<string, List<KeyValuePair<ISymbol, ISymbol>>>();
-            } 
+            }
 
         }
 
@@ -187,7 +187,7 @@ namespace CodeSharpenerCryptoAnalyzer
 
         private void AnalyzeMethodDeclarationNode(SyntaxNodeAnalysisContext context)
         {
-            List<KeyValuePair<ISymbol, ISymbol>> taintedDictionary = new List<KeyValuePair<ISymbol, ISymbol>>();            
+            List<KeyValuePair<ISymbol, ISymbol>> taintedDictionary = new List<KeyValuePair<ISymbol, ISymbol>>();
             TaintedContextDictionary.TryGetValue(context.ContainingSymbol.ToString(), out taintedDictionary);
             if (taintedDictionary != null)
             {
@@ -206,7 +206,7 @@ namespace CodeSharpenerCryptoAnalyzer
         /// </summary>
         /// <param name="context"></param>
         private void AnalyzeLocalDeclarationStatement(SyntaxNodeAnalysisContext context)
-        { 
+        {
             var localDeclarationStatement = (LocalDeclarationStatementSyntax)context.Node;
             LocalDeclarationStatementVisitor localDeclarationStatementVisitor = new LocalDeclarationStatementVisitor();
             localDeclarationStatementVisitor.Visit(localDeclarationStatement);
@@ -290,12 +290,12 @@ namespace CodeSharpenerCryptoAnalyzer
                 {
                     if (instantiatedMethodType.Equals(cryslSpecificationModel.Spec_Section.Class_Name))
                     {
-                        if(!ToAnalyzeCryslSection.ContainsKey(context.ContainingSymbol.ToString()))
+                        if (!ToAnalyzeCryslSection.ContainsKey(context.ContainingSymbol.ToString()))
                         {
                             CryslSectionList.Add(cryslSpecificationModel);
                             ToAnalyzeCryslSection.Add(context.ContainingSymbol.ToString(), CryslSectionList);
                         }
-                        else if(!CryslSectionList.Contains(cryslSpecificationModel))
+                        else if (!CryslSectionList.Contains(cryslSpecificationModel))
                         {
                             CryslSectionList.Add(cryslSpecificationModel);
                             ToAnalyzeCryslSection[context.ContainingSymbol.ToString()] = CryslSectionList;
@@ -345,7 +345,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                     if (methods.Aggregator != null)
                                     {
                                         //Add valid events to Events and Order Dictionary
-                                        AddEventsToDictionary(methods.Aggregator.Aggregator_Name, validEvents, cryptoMethods.FirstOrDefault().Method_Name, context.ContainingSymbol.ToString());
+                                        AddEventsToDictionary(methods.Aggregator.Aggregator_Name, validEvents, cryptoMethods.FirstOrDefault().Method_Name, context.ContainingSymbol.ToString(), cryslSpecificationModel.Spec_Section.Class_Name);
 
                                         bool isAggConditionSatisfied = commonUtilities.CheckAggregator(ValidEventsDictionary, methods.Aggregator.Aggregators);
                                         if (!isAggConditionSatisfied)
@@ -357,7 +357,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                     //Add single event to dictionary if aggregator not present.
                                     else
                                     {
-                                        AddEventsToDictionary(validEvents.PropertyName, validEvents, cryptoMethods.FirstOrDefault().Method_Name, context.ContainingSymbol.ToString());
+                                        AddEventsToDictionary(validEvents.PropertyName, validEvents, cryptoMethods.FirstOrDefault().Method_Name, context.ContainingSymbol.ToString(), cryslSpecificationModel.Spec_Section.Class_Name);
                                     }
 
                                     //Iterate throigh parameters if present and check for constraints only if arguments are present
@@ -471,7 +471,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                 CryslSectionList.Add(cryslSpecificationModel);
                                 ToAnalyzeCryslSection.Add(context.ContainingSymbol.ToString(), CryslSectionList);
                             }
-                            else if(!CryslSectionList.Contains(cryslSpecificationModel))
+                            else if (!CryslSectionList.Contains(cryslSpecificationModel))
                             {
                                 CryslSectionList.Add(cryslSpecificationModel);
                                 ToAnalyzeCryslSection[context.ContainingSymbol.ToString()] = CryslSectionList;
@@ -515,7 +515,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                         if (methods.Aggregator != null)
                                         {
                                             //Add valid events to Events and Order Dictionary
-                                            AddEventsToDictionary(methods.Aggregator.Aggregator_Name, validEvents, cryptoMethods.FirstOrDefault().Method_Name, context.ContainingSymbol.ToString());
+                                            AddEventsToDictionary(methods.Aggregator.Aggregator_Name, validEvents, cryptoMethods.FirstOrDefault().Method_Name, context.ContainingSymbol.ToString(), cryslSpecificationModel.Spec_Section.Class_Name);
 
                                             bool isAggConditionSatisfied = commonUtilities.CheckAggregator(ValidEventsDictionary, methods.Aggregator.Aggregators);
                                             if (!isAggConditionSatisfied)
@@ -527,7 +527,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                         //Add single event to dictionary if aggregator not present.
                                         else
                                         {
-                                            AddEventsToDictionary(validEvents.PropertyName, validEvents, cryptoMethods.FirstOrDefault().Method_Name, context.ContainingSymbol.ToString());
+                                            AddEventsToDictionary(validEvents.PropertyName, validEvents, cryptoMethods.FirstOrDefault().Method_Name, context.ContainingSymbol.ToString(), cryslSpecificationModel.Spec_Section.Class_Name);
                                         }
 
                                         //Iterate throigh parameters if present and check for constraints only if arguments are present
@@ -753,7 +753,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                         CryslSectionList.Add(cryslSpecificationModel);
                                         ToAnalyzeCryslSection.Add(context.ContainingSymbol.ToString(), CryslSectionList);
                                     }
-                                    else if(!CryslSectionList.Contains(cryslSpecificationModel))
+                                    else if (!CryslSectionList.Contains(cryslSpecificationModel))
                                     {
                                         CryslSectionList.Add(cryslSpecificationModel);
                                         ToAnalyzeCryslSection[context.ContainingSymbol.ToString()] = CryslSectionList;
@@ -772,7 +772,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                             isValidEvent = validEvents.IsValidEvent;
 
                                             //Add valid events to Events and Order Dictionary
-                                            AddEventsToDictionary(validEvents.AggregatorName, validEvents, cryptoMethods.FirstOrDefault().Method_Name, context.ContainingSymbol.ToString());
+                                            AddEventsToDictionary(validEvents.AggregatorName, validEvents, cryptoMethods.FirstOrDefault().Method_Name, context.ContainingSymbol.ToString(), cryslSpecificationModel.Spec_Section.Class_Name);
 
                                             string rightExprValue = string.Empty;
                                             if (simpleAssignExpr.Right.Kind().Equals(SyntaxKind.NumericLiteralExpression))
@@ -944,9 +944,9 @@ namespace CodeSharpenerCryptoAnalyzer
                 if (taintedDictionaryValues != null)
                 {
                     foreach (var taintedValue in taintedDictionaryValues)
-                    {                        
+                    {
                         bool taintedValuePresent = (taintedValue.Key.ToString().Equals(containingMethod.ToString()) && taintedValue.Value.Kind.Equals(nodeInfo.Kind) && taintedValue.Value.ToString().Equals(nodeInfo.ToString()) && taintedValue.Value.Name.ToString().Equals(nodeInfo.Name.ToString())) ? true : false;
-                        
+
                         if (taintedValuePresent)
                         {
                             return true;
@@ -957,9 +957,9 @@ namespace CodeSharpenerCryptoAnalyzer
                 else
                 {
                     foreach (var taintedValue in TaintedValuesDictionary)
-                    {                        
+                    {
                         bool taintedValuePresent = (taintedValue.Key.ToString().Equals(containingMethod.ToString()) && taintedValue.Value.Kind.Equals(nodeInfo.Kind) && taintedValue.Value.ToString().Equals(nodeInfo.ToString()) && taintedValue.Value.Name.ToString().Equals(nodeInfo.Name.ToString())) ? true : false;
-                        
+
                         if (taintedValuePresent)
                         {
                             return true;
@@ -969,8 +969,8 @@ namespace CodeSharpenerCryptoAnalyzer
                     foreach (var taintedValueDictionary in TaintedContextDictionary)
                     {
                         foreach (var taintedValue in taintedValueDictionary.Value)
-                        { 
-                            bool taintedValuePresent = (taintedValue.Key.ToString().Equals(containingMethod.ToString()) && taintedValue.Value.Kind.Equals(nodeInfo.Kind) && taintedValue.Value.ToString().Equals(nodeInfo.ToString()) && taintedValue.Value.Name.ToString().Equals(nodeInfo.Name.ToString())) ? true : false;                            
+                        {
+                            bool taintedValuePresent = (taintedValue.Key.ToString().Equals(containingMethod.ToString()) && taintedValue.Value.Kind.Equals(nodeInfo.Kind) && taintedValue.Value.ToString().Equals(nodeInfo.ToString()) && taintedValue.Value.Name.ToString().Equals(nodeInfo.Name.ToString())) ? true : false;
                             if (taintedValuePresent)
                             {
                                 return true;
@@ -1070,103 +1070,109 @@ namespace CodeSharpenerCryptoAnalyzer
 
         private void AnalyzeUsingBlock(OperationAnalysisContext context)
         {
-            bool isEventPresent = false;
-            Dictionary<string, string> eventsOrderDictionary = new Dictionary<string, string>();
-            EventsOrderDictionary.TryGetValue(context.ContainingSymbol.ToString(), out eventsOrderDictionary);
+            var currentEventsOrderDictionary = EventsOrderDictionary.ToImmutableSortedDictionary();
 
-            if(eventsOrderDictionary == null)
+            foreach (var eventsOrderDictValues in currentEventsOrderDictionary)
             {
-                eventsOrderDictionary = new Dictionary<string, string>();
-            }
-            else
-            {
-                isEventPresent = true;
-            }
+                Dictionary<string, List<KeyValuePair<string, string>>> orderDictValues = new Dictionary<string, List<KeyValuePair<string, string>>>();
+                EventsOrderDictionary.TryGetValue(eventsOrderDictValues.Key, out orderDictValues);
+                bool isEventPresent = false;
 
-            var operationSymbol = context.Operation as Microsoft.CodeAnalysis.Operations.IUsingOperation;
-            if (operationSymbol != null)
-            {
-                foreach (var local in operationSymbol.Locals)
+                List<KeyValuePair<string, string>> eventsOrderDictionary = new List<KeyValuePair<string, string>>();
+                orderDictValues.TryGetValue(context.ContainingSymbol.ToString(), out eventsOrderDictionary);
+
+                if (eventsOrderDictionary == null)
                 {
-                    foreach (var cryslSpecificationModel in _cryslSpecificationModel.Values)
+                    eventsOrderDictionary = new List<KeyValuePair<string, string>>();
+                }
+                else
+                {
+                    isEventPresent = true;
+                }
+
+                var operationSymbol = context.Operation as Microsoft.CodeAnalysis.Operations.IUsingOperation;
+                if (operationSymbol != null)
+                {
+                    foreach (var local in operationSymbol.Locals)
                     {
-                        if (local.Type.ToString().Equals(cryslSpecificationModel.Spec_Section.Class_Name))
+                        foreach (var cryslSpecificationModel in _cryslSpecificationModel.Values)
                         {
-                            foreach (var methods in cryslSpecificationModel.Event_Section.Methods)
+                            if (local.Type.ToString().Equals(cryslSpecificationModel.Spec_Section.Class_Name) && eventsOrderDictValues.Key.Equals(local.Type.ToString()))
                             {
-                                var cryptoMethods = methods.Crypto_Signature.Select(y => y).Where(x => x.Method_Name.ToString().Equals("Dispose"));
-                                if (cryptoMethods.Count() > 0)
+                                foreach (var methods in cryslSpecificationModel.Event_Section.Methods)
                                 {
-
-                                    MethodSignatureModel methodSignatureModel = new MethodSignatureModel
+                                    var cryptoMethods = methods.Crypto_Signature.Select(y => y).Where(x => x.Method_Name.ToString().Equals("Dispose"));
+                                    if (cryptoMethods.Count() > 0)
                                     {
-                                        MethodName = "Dispose"
-                                    };
 
-                                    List<MethodSignatureModel> methodSignatureModels = new List<MethodSignatureModel>();
-                                    ValidEventsDictionary.TryGetValue(cryptoMethods.FirstOrDefault().Event_Var_Name, out methodSignatureModels);
-                                    if (methodSignatureModels != null)
-                                    {
-                                        methodSignatureModels.Add(methodSignatureModel);
-                                        lock (ValidEventsDictionary)
+                                        MethodSignatureModel methodSignatureModel = new MethodSignatureModel
                                         {
-                                            ValidEventsDictionary[cryptoMethods.FirstOrDefault().Event_Var_Name] = methodSignatureModels;
-                                        }
-                                        if (methods.Aggregator == null)
+                                            MethodName = "Dispose"
+                                        };
+
+                                        List<MethodSignatureModel> methodSignatureModels = new List<MethodSignatureModel>();
+                                        ValidEventsDictionary.TryGetValue(cryptoMethods.FirstOrDefault().Event_Var_Name, out methodSignatureModels);
+                                        if (methodSignatureModels != null)
                                         {
-                                            lock (EventsOrderDictionary)
+                                            methodSignatureModels.Add(methodSignatureModel);
+                                            lock (ValidEventsDictionary)
                                             {
-                                                eventsOrderDictionary[cryptoMethods.FirstOrDefault().Event_Var_Name] = cryptoMethods.FirstOrDefault().Method_Name;
+                                                ValidEventsDictionary[cryptoMethods.FirstOrDefault().Event_Var_Name] = methodSignatureModels;
+                                            }
+                                            if (methods.Aggregator == null)
+                                            {
+                                                lock (EventsOrderDictionary)
+                                                {
+                                                    eventsOrderDictionary.Add(new KeyValuePair<string, string>(cryptoMethods.FirstOrDefault().Event_Var_Name, cryptoMethods.FirstOrDefault().Method_Name));
+                                                }
+                                            }
+                                            else
+                                            {
+                                                lock (EventsOrderDictionary)
+                                                {
+                                                    eventsOrderDictionary.Add(new KeyValuePair<string, string>(methods.Aggregator.Aggregator_Name, cryptoMethods.FirstOrDefault().Method_Name));                                                    
+                                                }
                                             }
                                         }
                                         else
                                         {
-                                            lock (EventsOrderDictionary)
+                                            List<MethodSignatureModel> methodSignatureModelList = new List<MethodSignatureModel>();
+                                            methodSignatureModelList.Add(methodSignatureModel);
+                                            lock (ValidEventsDictionary)
                                             {
-                                                eventsOrderDictionary[methods.Aggregator.Aggregator_Name] = cryptoMethods.FirstOrDefault().Method_Name;
+                                                Dictionary<string, string> eventOrderDict = new Dictionary<string, string>();
+                                                ValidEventsDictionary.Add(cryptoMethods.FirstOrDefault().Event_Var_Name, methodSignatureModelList);
                                             }
-                                        }
-                                    }
-                                    else
-                                    {
-                                        List<MethodSignatureModel> methodSignatureModelList = new List<MethodSignatureModel>();
-                                        methodSignatureModelList.Add(methodSignatureModel);
-                                        lock (ValidEventsDictionary)
-                                        {
-                                            ValidEventsDictionary.Add(cryptoMethods.FirstOrDefault().Event_Var_Name, methodSignatureModelList);
-                                        }
-                                        if (methods.Aggregator == null)
-                                        {
-                                            lock(EventsOrderDictionary)
+                                            lock (eventsOrderDictionary)
                                             {
-                                                eventsOrderDictionary.Add(cryptoMethods.FirstOrDefault().Event_Var_Name, cryptoMethods.FirstOrDefault().Method_Name);
-                                            }
-                                        }
-                                        else
-                                        {
-                                            lock (EventsOrderDictionary)
-                                            {
-                                                eventsOrderDictionary.Add(methods.Aggregator.Aggregator_Name, cryptoMethods.FirstOrDefault().Method_Name);
+                                                eventsOrderDictionary.Add(new KeyValuePair<string, string>(cryptoMethods.FirstOrDefault().Event_Var_Name, cryptoMethods.FirstOrDefault().Method_Name));
                                             }
                                         }
                                     }
                                 }
                             }
+
+                            if (isEventPresent)
+                            {
+                                orderDictValues[context.ContainingSymbol.ToString()] = eventsOrderDictionary;
+                                lock (EventsOrderDictionary)
+                                {
+                                    EventsOrderDictionary[eventsOrderDictValues.Key] = orderDictValues;
+                                }
+
+                            }
+                            else
+                            {
+                                orderDictValues.Add(context.ContainingSymbol.ToString(), eventsOrderDictionary);
+                                lock (EventsOrderDictionary)
+                                {
+                                    EventsOrderDictionary[eventsOrderDictValues.Key] = orderDictValues;
+                                }
+                            }
                         }
                     }
                 }
-
-                if(isEventPresent)
-                {
-                    EventsOrderDictionary[context.ContainingSymbol.ToString()] = eventsOrderDictionary;
-                }
-                else
-                {
-                    EventsOrderDictionary.Add(context.ContainingSymbol.ToString(), eventsOrderDictionary);
-                }
             }
-
-
         }
 
         private void AnalyzeCodeBlockAction(CodeBlockStartAnalysisContext<SyntaxKind> context)
@@ -1176,27 +1182,31 @@ namespace CodeSharpenerCryptoAnalyzer
 
         private void AnalyzeCodeBLockEndAction(CodeBlockAnalysisContext context)
         {
-            List<CryslJsonModel> cryslJsonModels = new List<CryslJsonModel>();
-            ToAnalyzeCryslSection.TryGetValue(context.OwningSymbol.ToString(), out cryslJsonModels);
-            if (cryslJsonModels != null)
+            foreach (var eventsOrderDict in EventsOrderDictionary)
             {
-                foreach (var cryslSpecificationModel in cryslJsonModels)
+                List<CryslJsonModel> cryslJsonModels = new List<CryslJsonModel>();
+                ToAnalyzeCryslSection.TryGetValue(context.OwningSymbol.ToString(), out cryslJsonModels);
+                if (cryslJsonModels != null)
                 {
-                    var commonUtilities = _serviceProvider.GetService<ICommonUtilities>();
-                    EventOrderContraint = commonUtilities.GetEventOrderList(cryslSpecificationModel);
-                    if (EventsOrderDictionary.Count != 0)
+                    var cryslSpecificationModelList = cryslJsonModels.Select(x => x).Where(y => y.Spec_Section.Class_Name.Equals(eventsOrderDict.Key));
+                    foreach (var cryslSpecificationModel in cryslSpecificationModelList)
                     {
-                        Dictionary<string, string> eventsOrderDictionary = new Dictionary<string, string>();
-                        EventsOrderDictionary.TryGetValue(context.OwningSymbol.ToString(), out eventsOrderDictionary);
-                        if (eventsOrderDictionary != null)
+                        var commonUtilities = _serviceProvider.GetService<ICommonUtilities>();
+                        EventOrderContraint = commonUtilities.GetEventOrderList(cryslSpecificationModel);
+                        if (EventsOrderDictionary.Count != 0)
                         {
-                            var orderCheckConstraint = _serviceProvider.GetService<IOrderSectionAnalyzer>();
-                            var isValidOrder = orderCheckConstraint.IsValidOrder(eventsOrderDictionary, EventOrderContraint.Select(x => x.Key).ToList());
-                            if (!isValidOrder)
+                            List<KeyValuePair<string, string>> eventsOrderDictionary = new List<KeyValuePair<string, string>>();
+                            eventsOrderDict.Value.TryGetValue(context.OwningSymbol.ToString(), out eventsOrderDictionary);
+                            if (eventsOrderDictionary != null)
                             {
-                                string validEventOrder = string.Join(", ", EventOrderContraint.Select(x => x.Value));
-                                var diagnsotics = Diagnostic.Create(OrderAnalyzerViolationRule, context.OwningSymbol.Locations[0], cryslSpecificationModel.Spec_Section.Class_Name, validEventOrder);
-                                context.ReportDiagnostic(diagnsotics);
+                                var orderCheckConstraint = _serviceProvider.GetService<IOrderSectionAnalyzer>();
+                                var isValidOrder = orderCheckConstraint.IsValidOrder(eventsOrderDictionary, EventOrderContraint.Select(x => x.Key).ToList());
+                                if (!isValidOrder)
+                                {
+                                    string validEventOrder = string.Join(", ", EventOrderContraint.Select(x => x.Value));
+                                    var diagnsotics = Diagnostic.Create(OrderAnalyzerViolationRule, context.OwningSymbol.Locations[0], cryslSpecificationModel.Spec_Section.Class_Name, validEventOrder);
+                                    context.ReportDiagnostic(diagnsotics);
+                                }
                             }
                         }
                     }
@@ -1224,15 +1234,29 @@ namespace CodeSharpenerCryptoAnalyzer
         /// </summary>
         /// <param name="aggregatorName"></param>
         /// <param name="validEvents"></param>
-        private static void AddEventsToDictionary(string aggregatorName, ValidEvents validEvents, string methodName, string containingSymbol)
+        private static void AddEventsToDictionary(string aggregatorName, ValidEvents validEvents, string methodName, string containingSymbol, string cryslSpecSection)
         {
-            bool isEventPresent = false;
-            Dictionary<string, string> eventsOrderDictionary = new Dictionary<string, string>();
-            EventsOrderDictionary.TryGetValue(containingSymbol, out eventsOrderDictionary);
+            Dictionary<string, List<KeyValuePair<string, string>>> eventsOrderDict = new Dictionary<string, List<KeyValuePair<string, string>>>();
+            EventsOrderDictionary.TryGetValue(cryslSpecSection, out eventsOrderDict);
+            AddEventsAndOrder(aggregatorName, validEvents, methodName, containingSymbol, cryslSpecSection, eventsOrderDict);
 
-            if(eventsOrderDictionary == null)
+        }
+
+        private static void AddEventsAndOrder(string aggregatorName, ValidEvents validEvents, string methodName, string containingSymbol, string cryslSpecSection, Dictionary<string, List<KeyValuePair<string, string>>> eventsOrderDict)
+        {
+            bool isCryslSpecPresent = true;
+            if (eventsOrderDict == null)
             {
-                eventsOrderDictionary = new Dictionary<string, string>();
+                isCryslSpecPresent = false;
+                eventsOrderDict = new Dictionary<string, List<KeyValuePair<string, string>>>();
+            }
+            bool isEventPresent = false;
+            List<KeyValuePair<string, string>> eventsOrderDictionary = new List<KeyValuePair<string, string>>();
+            eventsOrderDict.TryGetValue(containingSymbol, out eventsOrderDictionary);
+
+            if (eventsOrderDictionary == null)
+            {
+                eventsOrderDictionary = new List<KeyValuePair<string, string>>();
             }
             else
             {
@@ -1241,10 +1265,23 @@ namespace CodeSharpenerCryptoAnalyzer
 
             //Check only if Aggregators are present        
             //For instance it could be "Create" in Aes Crysl specification
-            var aggregatorEvents = EventsOrderDictionary.Where(x => x.Key.ToString().Contains(aggregatorName)).Select(y => y).FirstOrDefault();
+            Dictionary<string, List<KeyValuePair<string, string>>> specEventDict = new Dictionary<string, List<KeyValuePair<string, string>>>();
+            EventsOrderDictionary.TryGetValue(cryslSpecSection, out specEventDict);
+
+            List<KeyValuePair<string, string>> contextEventsDict = new List<KeyValuePair<string, string>>();
+            if (specEventDict != null)
+            {                
+                specEventDict.TryGetValue(containingSymbol, out contextEventsDict);
+            }
+
+            KeyValuePair<string, string> aggregatorEvents = new KeyValuePair<string, string>();
+            if (contextEventsDict != null)
+            {
+                aggregatorEvents = contextEventsDict.Where(x => x.Key.ToString().Contains(aggregatorName)).Select(y => y).FirstOrDefault();
+            }
 
             //If the Event is not present
-            if (aggregatorEvents.Value != null)
+            if (!aggregatorEvents.Equals(default(KeyValuePair<string, string>)))
             {
                 List<MethodSignatureModel> validMethodSignatures = new List<MethodSignatureModel>();
                 ValidEventsDictionary.TryGetValue(validEvents.PropertyName, out validMethodSignatures);
@@ -1271,9 +1308,8 @@ namespace CodeSharpenerCryptoAnalyzer
                 //Updating the value because the key is already present
                 lock (EventsOrderDictionary)
                 {
-                    eventsOrderDictionary[aggregatorName] = methodName;
+                    eventsOrderDictionary.Add(new KeyValuePair<string, string>(aggregatorName, methodName));                    
                 }
-
 
             }
             else
@@ -1302,17 +1338,46 @@ namespace CodeSharpenerCryptoAnalyzer
                 }
                 lock (EventsOrderDictionary)
                 {
-                    eventsOrderDictionary.Add(aggregatorName, methodName);
+                    eventsOrderDictionary.Add(new KeyValuePair<string, string>(aggregatorName, methodName));                   
                 }
             }
-            if(isEventPresent)
+            if (isEventPresent)
             {
-                EventsOrderDictionary[containingSymbol] = eventsOrderDictionary;
+                eventsOrderDict[containingSymbol] = eventsOrderDictionary;
+                if (!isCryslSpecPresent)
+                {
+                    lock (EventsOrderDictionary)
+                    {
+                        EventsOrderDictionary.Add(cryslSpecSection, eventsOrderDict);
+                    }
+                }
+                else
+                {
+                    lock (EventsOrderDictionary)
+                    {
+                        EventsOrderDictionary[cryslSpecSection] = eventsOrderDict;
+                    }
+                }
             }
             else
             {
-                EventsOrderDictionary.Add(containingSymbol, eventsOrderDictionary);
+                eventsOrderDict.Add(containingSymbol, eventsOrderDictionary);
+                if (!isCryslSpecPresent)
+                {
+                    lock (EventsOrderDictionary)
+                    {
+                        EventsOrderDictionary.Add(cryslSpecSection, eventsOrderDict);
+                    }
+                }
+                else
+                {
+                    lock (EventsOrderDictionary)
+                    {
+                        EventsOrderDictionary[cryslSpecSection] = eventsOrderDict;
+                    }
+                }
             }
+
         }
     }
 }

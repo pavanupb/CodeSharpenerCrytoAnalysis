@@ -27,7 +27,7 @@ namespace CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers
         /// </summary>
         /// <param name="validEvents"></param>
         /// <param name="containingMethod"></param>
-        public bool IsValidOrder(Dictionary<string, string> currentEventOrderDict, List<string> eventOrderConstraint)
+        public bool IsValidOrder(List<KeyValuePair<string, string>> currentEventOrderDict, List<string> eventOrderConstraint)
         {
             var currentEventsOrder = currentEventOrderDict.Select(x => x.Key).ToList();
             var commonUtilities = serviceProvider.GetService<ICommonUtilities>();

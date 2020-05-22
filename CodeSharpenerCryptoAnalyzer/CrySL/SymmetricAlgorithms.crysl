@@ -14,11 +14,11 @@ OBJECTS
 EVENTS
 	c1: Create();
 	c2: Create(algorithm);
-	Create := c1 | c2 ;	
-
-	s1: keySize = KeySize;
-	s2: cipherMode = Mode;
-	s3: blockSize = BlockSize;
+	CreateAES := c1 | c2 ;
+	
+	s1: blockSize = BlockSize;
+	s2: keySize = KeySize;
+	s3: cipherMode = Mode;	
 	s4: paddingMode = Padding;
 
 	CreateEncryptor: cryptoTransform = CreateEncryptor(key, IV);
@@ -30,10 +30,10 @@ EVENTS
 	
 	
 ORDER
-	Create, s1?, s2?, s3?, s4?, CreateEncryptor?, CreateDecryptor?, Dispose
+	CreateAES, s1?, s2?, s3?, s4?, CreateEncryptor?, CreateDecryptor?, Dispose
 
 CONSTRAINTS
-		algorithm in {"AES", "AesCryptoServiceProvider", "System.Security.Cryptography.AesCryptoServiceProvider", "AesManaged", "System.Security.Cryptography.AesManaged", "Rijndael"};		
+		algorithm in {"AES", "AesCryptoServiceProvider", "System.Security.Cryptography.AesCryptoServiceProvider", "AesManaged", "System.Security.Cryptography.AesManaged", "Rijndael"};
 		keySize in {128, 256};
 		cipherMode in {"CBC"};
 		blockSize in {128};
