@@ -154,7 +154,7 @@ namespace CodeSharpenerCryptoAnalyzer
             context.RegisterSyntaxNodeAction(AnalyzeObjectCreation, SyntaxKind.ObjectCreationExpression);
             context.RegisterSyntaxNodeAction(AnalyzeMethodInvocationNode, SyntaxKind.InvocationExpression);
             context.RegisterSyntaxNodeAction(AnalyzeSimpleAssignmentExpression, SyntaxKind.SimpleAssignmentExpression);
-            context.RegisterSyntaxNodeAction(AnalyzeLocalDeclarationStatement, SyntaxKind.LocalDeclarationStatement);
+            context.RegisterSyntaxNodeAction(AnalyzeLocalDeclarationStatement, SyntaxKind.LocalDeclarationStatement, SyntaxKind.FieldDeclaration);
             context.RegisterSyntaxNodeAction(AnalyzeMethodDeclarationNode, SyntaxKind.MethodDeclaration);
 
 
@@ -207,7 +207,7 @@ namespace CodeSharpenerCryptoAnalyzer
         /// <param name="context"></param>
         private void AnalyzeLocalDeclarationStatement(SyntaxNodeAnalysisContext context)
         {
-            var localDeclarationStatement = (LocalDeclarationStatementSyntax)context.Node;
+            var localDeclarationStatement = context.Node;            
             LocalDeclarationStatementVisitor localDeclarationStatementVisitor = new LocalDeclarationStatementVisitor();
             localDeclarationStatementVisitor.Visit(localDeclarationStatement);
 
@@ -245,11 +245,14 @@ namespace CodeSharpenerCryptoAnalyzer
                         TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo));
                     }
                 }
-                var dataFlowAnalysisResult = context.SemanticModel.AnalyzeDataFlow(localDeclarationStatement);
-                if (dataFlowAnalysisResult.ReadOutside.Contains(nodeSymbolInfo))
+                if (!localDeclarationStatement.Kind().Equals(SyntaxKind.FieldDeclaration))
                 {
-                    var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
-                    context.ReportDiagnostic(diagnsotics);
+                    var dataFlowAnalysisResult = context.SemanticModel.AnalyzeDataFlow(localDeclarationStatement);
+                    if (dataFlowAnalysisResult.ReadOutside.Contains(nodeSymbolInfo))
+                    {
+                        var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
+                        context.ReportDiagnostic(diagnsotics);
+                    }
                 }
             }
 
@@ -265,11 +268,15 @@ namespace CodeSharpenerCryptoAnalyzer
                         TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo));
                     }
                 }
-                var dataFlowAnalysisResult = context.SemanticModel.AnalyzeDataFlow(localDeclarationStatement);
-                if (dataFlowAnalysisResult.ReadOutside.Contains(nodeSymbolInfo))
+
+                if (!localDeclarationStatement.Kind().Equals(SyntaxKind.FieldDeclaration))
                 {
-                    var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
-                    context.ReportDiagnostic(diagnsotics);
+                    var dataFlowAnalysisResult = context.SemanticModel.AnalyzeDataFlow(localDeclarationStatement);
+                    if (dataFlowAnalysisResult.ReadOutside.Contains(nodeSymbolInfo))
+                    {
+                        var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
+                        context.ReportDiagnostic(diagnsotics);
+                    }
                 }
             }
         }
@@ -619,7 +626,7 @@ namespace CodeSharpenerCryptoAnalyzer
                         {
                             if (Type.GetType(invocatorType).BaseType != null)
                             {
-                                if (Type.GetType(invocatorType).BaseType.FullName.Equals(cryslSpecificationModel.Spec_Section.Class_Name))
+                                if (Type.GetType(invocatorType).BaseType.FullName.Equals(cryslSpecificationModel.Spec_Section.Class_Name) && !Type.GetType(invocatorType).FullName.Equals("System.Security.Cryptography.KeyedHashAlgorithm"))
                                 {
                                     var diagnsotics = Diagnostic.Create(DerivedTypeRule, invocationExpressionNode.GetLocation(), invocatorType, cryslSpecificationModel.Spec_Section.Class_Name);
                                     context.ReportDiagnostic(diagnsotics);
@@ -763,72 +770,75 @@ namespace CodeSharpenerCryptoAnalyzer
                                     bool isValidEvent = false;
                                     foreach (var methods in cryslSpecificationModel.Event_Section.Methods)
                                     {
-                                        var cryptoMethods = methods.Crypto_Signature.Select(x => x).Where(y => y.Method_Name.ToString().Equals(leftExprSymbolInfo.Name.ToString()));
-                                        if (cryptoMethods.Count() > 0)
+                                        if (leftExprSymbolInfo != null)
                                         {
-                                            //Set the flag to true as a valid event
-                                            IEventSectionAnalyzer analyzer = _serviceProvider.GetService<IEventSectionAnalyzer>();
-                                            var validEvents = analyzer.AnalyzeAssignmentExprSyntax(cryptoMethods, cryslSpecificationModel, context, leftExprSymbolInfo);
-                                            isValidEvent = validEvents.IsValidEvent;
-
-                                            //Add valid events to Events and Order Dictionary
-                                            AddEventsToDictionary(validEvents.AggregatorName, validEvents, cryptoMethods.FirstOrDefault().Method_Name, context.ContainingSymbol.ToString(), cryslSpecificationModel.Spec_Section.Class_Name);
-
-                                            string rightExprValue = string.Empty;
-                                            if (simpleAssignExpr.Right.Kind().Equals(SyntaxKind.NumericLiteralExpression))
+                                            var cryptoMethods = methods.Crypto_Signature.Select(x => x).Where(y => y.Method_Name.ToString().Equals(leftExprSymbolInfo.Name.ToString()));
+                                            if (cryptoMethods.Count() > 0)
                                             {
-                                                var literalExpressionSyntax = (LiteralExpressionSyntax)simpleAssignExpr.Right;
-                                                rightExprValue = literalExpressionSyntax.Token.Value.ToString();
+                                                //Set the flag to true as a valid event
+                                                IEventSectionAnalyzer analyzer = _serviceProvider.GetService<IEventSectionAnalyzer>();
+                                                var validEvents = analyzer.AnalyzeAssignmentExprSyntax(cryptoMethods, cryslSpecificationModel, context, leftExprSymbolInfo);
+                                                isValidEvent = validEvents.IsValidEvent;
 
-                                            }
-                                            else if (rightExprSymbolInfo != null)
-                                            {
-                                                rightExprValue = rightExprSymbolInfo.Name.ToString();
-                                            }
-                                            //Check if primary constraints are satified if any
-                                            IConstraintsSectionAnalyzer constraintsSectionAnalyzer = _serviceProvider.GetService<IConstraintsSectionAnalyzer>();
-                                            bool isPrimaryConstraintSatisfied = constraintsSectionAnalyzer.IsPropertyConstraintSatisfied(cryslSpecificationModel, validEvents, rightExprValue);
-                                            if (!isPrimaryConstraintSatisfied)
-                                            {
-                                                var accepetedParameterValues = cryslSpecificationModel.Constraints_Section.Constraints.Where(x => x.Object_Varname.Equals(validEvents.PropertyName) && x.Additional_constraints == null).Select(y => y.Constraints_List);
-                                                string validParameterValues = string.Empty;
-                                                if (accepetedParameterValues.Count() != 0)
+                                                //Add valid events to Events and Order Dictionary
+                                                AddEventsToDictionary(validEvents.AggregatorName, validEvents, cryptoMethods.FirstOrDefault().Method_Name, context.ContainingSymbol.ToString(), cryslSpecificationModel.Spec_Section.Class_Name);
+
+                                                string rightExprValue = string.Empty;
+                                                if (simpleAssignExpr.Right.Kind().Equals(SyntaxKind.NumericLiteralExpression))
                                                 {
-                                                    validParameterValues = string.Join(",", accepetedParameterValues.FirstOrDefault());
+                                                    var literalExpressionSyntax = (LiteralExpressionSyntax)simpleAssignExpr.Right;
+                                                    rightExprValue = literalExpressionSyntax.Token.Value.ToString();
+
                                                 }
-                                                var diagnsotics = Diagnostic.Create(ConstraintAnalyzerViolationRule, simpleAssExpr.GetLocation(), rightExprValue, validParameterValues);
-                                                context.ReportDiagnostic(diagnsotics);
-                                            }
-
-                                            //Check if additional constraints are satisfied if any
-                                            List<AddConstraints> additionalConstraintsList = new List<AddConstraints>();
-                                            AdditionalConstraintsDict.TryGetValue(cryslSpecificationModel.Spec_Section.Class_Name, out additionalConstraintsList);
-
-                                            //Check additionalConstraints for null because additionalConstraints is an out parameter, so if TryGet does not return anything, then additionalConstraints would be set to null
-                                            if (additionalConstraintsList != null)
-                                            {
-                                                foreach (var additionalConstraints in additionalConstraintsList)
+                                                else if (rightExprSymbolInfo != null)
                                                 {
-                                                    if (additionalConstraints.EventVariableDeclarator.ToString().Equals(localInvocatorSymbolInfo.Name.ToString()))
+                                                    rightExprValue = rightExprSymbolInfo.Name.ToString();
+                                                }
+                                                //Check if primary constraints are satified if any
+                                                IConstraintsSectionAnalyzer constraintsSectionAnalyzer = _serviceProvider.GetService<IConstraintsSectionAnalyzer>();
+                                                bool isPrimaryConstraintSatisfied = constraintsSectionAnalyzer.IsPropertyConstraintSatisfied(cryslSpecificationModel, validEvents, rightExprValue);
+                                                if (!isPrimaryConstraintSatisfied)
+                                                {
+                                                    var accepetedParameterValues = cryslSpecificationModel.Constraints_Section.Constraints.Where(x => x.Object_Varname.Equals(validEvents.PropertyName) && x.Additional_constraints == null).Select(y => y.Constraints_List);
+                                                    string validParameterValues = string.Empty;
+                                                    if (accepetedParameterValues.Count() != 0)
                                                     {
-                                                        constraintsSectionAnalyzer = _serviceProvider.GetService<IConstraintsSectionAnalyzer>();
-                                                        bool isAdditionalConstraintSatisfied = constraintsSectionAnalyzer.IsAdditionalConstraintSatisfied(additionalConstraints, leftExprSymbolInfo, rightExprValue, cryslSpecificationModel.Object_Section.Objects_Declaration, validEvents);
-                                                        if (!isAdditionalConstraintSatisfied)
+                                                        validParameterValues = string.Join(",", accepetedParameterValues.FirstOrDefault());
+                                                    }
+                                                    var diagnsotics = Diagnostic.Create(ConstraintAnalyzerViolationRule, simpleAssExpr.GetLocation(), rightExprValue, validParameterValues);
+                                                    context.ReportDiagnostic(diagnsotics);
+                                                }
+
+                                                //Check if additional constraints are satisfied if any
+                                                List<AddConstraints> additionalConstraintsList = new List<AddConstraints>();
+                                                AdditionalConstraintsDict.TryGetValue(cryslSpecificationModel.Spec_Section.Class_Name, out additionalConstraintsList);
+
+                                                //Check additionalConstraints for null because additionalConstraints is an out parameter, so if TryGet does not return anything, then additionalConstraints would be set to null
+                                                if (additionalConstraintsList != null)
+                                                {
+                                                    foreach (var additionalConstraints in additionalConstraintsList)
+                                                    {
+                                                        if (additionalConstraints.EventVariableDeclarator.ToString().Equals(localInvocatorSymbolInfo.Name.ToString()))
                                                         {
-                                                            var validValues = additionalConstraints.ConstraintsModels.Select(x => x.AdditionalConstraints.Where(y => y.Object_Varname_Additional_Constraint.ToString().Equals(validEvents.PropertyName.ToString()))).FirstOrDefault().Select(x => x.Additional_Constraints_List);
-                                                            string validParameterValues = string.Empty;
-                                                            if (validValues.Count() != 0)
+                                                            constraintsSectionAnalyzer = _serviceProvider.GetService<IConstraintsSectionAnalyzer>();
+                                                            bool isAdditionalConstraintSatisfied = constraintsSectionAnalyzer.IsAdditionalConstraintSatisfied(additionalConstraints, leftExprSymbolInfo, rightExprValue, cryslSpecificationModel.Object_Section.Objects_Declaration, validEvents);
+                                                            if (!isAdditionalConstraintSatisfied)
                                                             {
-                                                                validParameterValues = string.Join(",", validValues.FirstOrDefault());
+                                                                var validValues = additionalConstraints.ConstraintsModels.Select(x => x.AdditionalConstraints.Where(y => y.Object_Varname_Additional_Constraint.ToString().Equals(validEvents.PropertyName.ToString()))).FirstOrDefault().Select(x => x.Additional_Constraints_List);
+                                                                string validParameterValues = string.Empty;
+                                                                if (validValues.Count() != 0)
+                                                                {
+                                                                    validParameterValues = string.Join(",", validValues.FirstOrDefault());
+                                                                }
+                                                                var diagnsotics = Diagnostic.Create(ConstraintAnalyzerViolationRule, simpleAssExpr.GetLocation(), rightExprValue, validParameterValues);
+                                                                context.ReportDiagnostic(diagnsotics);
                                                             }
-                                                            var diagnsotics = Diagnostic.Create(ConstraintAnalyzerViolationRule, simpleAssExpr.GetLocation(), rightExprValue, validParameterValues);
-                                                            context.ReportDiagnostic(diagnsotics);
                                                         }
                                                     }
+
                                                 }
 
                                             }
-
                                         }
                                     }
                                     if (!isValidEvent)
