@@ -360,7 +360,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                         bool isAggConditionSatisfied = commonUtilities.CheckAggregator(validEventsDictionary, methods.Aggregator.Aggregators);
                                         if (!isAggConditionSatisfied)
                                         {
-                                            var diagnsotics = Diagnostic.Create(EventAggViolationRule, objectCreationNode.GetLocation(), validEvents.PropertyName);
+                                            var diagnsotics = Diagnostic.Create(EventAggViolationRule, objectCreationNode.GetLocation(), cryslSpecificationModel.Spec_Section.Class_Name, validEvents.PropertyName);
                                             context.ReportDiagnostic(diagnsotics);
                                         }
                                     }
@@ -533,7 +533,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                             bool isAggConditionSatisfied = commonUtilities.CheckAggregator(validEventsDictionary, methods.Aggregator.Aggregators);
                                             if (!isAggConditionSatisfied)
                                             {
-                                                var diagnsotics = Diagnostic.Create(EventAggViolationRule, node.GetLocation(), validEvents.PropertyName);
+                                                var diagnsotics = Diagnostic.Create(EventAggViolationRule, node.GetLocation(), cryslSpecificationModel.Spec_Section.Class_Name, validEvents.ValidMethods.MethodName);
                                                 context.ReportDiagnostic(diagnsotics);
                                             }
                                         }

@@ -151,7 +151,7 @@ namespace CodeSharpenerCryptoAnalyzer {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Event &apos;{0}&apos; does not Satisfy Aggregation Condition.
+        ///   Looks up a localized string similar to The Method &apos;{0}.{1}&apos; does not Satisfy Crysl Aggregation Condition..
         /// </summary>
         internal static string EventAggAnalyzerMessageFormat {
             get {

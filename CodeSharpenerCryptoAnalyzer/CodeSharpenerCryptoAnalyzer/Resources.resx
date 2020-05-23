@@ -148,7 +148,7 @@
     <value>Event Aggregation Condition not Satisfied</value>
   </data>
   <data name="EventAggAnalyzerMessageFormat" xml:space="preserve">
-    <value>Event '{0}' does not Satisfy Aggregation Condition</value>
+    <value>The Method '{0}.{1}' does not Satisfy Crysl Aggregation Condition.</value>
   </data>
   <data name="EventAggAnalyzerTitle" xml:space="preserve">
     <value>Event Aggregation Condition Violation</value>
