@@ -9,6 +9,7 @@ using CodeSharpenerCryptoAnalysis.AnalyzerModels;
 using CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers;
 using CodeSharpenerCryptoAnalysis.Models;
 using CodeSharpenerCryptoAnalyzer.CryslBuilder;
+using CodeSharpenerCryptoAnalyzer.CryslBuilder.Models.CSharpModels;
 using CodeSharpenerCryptoAnalyzer.Visitors;
 using CodeSharpenerCryptoAnalzer.Common;
 using CryslCSharpObjectBuilder.Models.CSharpModels;
@@ -21,6 +22,7 @@ using Microsoft.CodeAnalysis.FlowAnalysis.DataFlow;
 using Microsoft.CodeAnalysis.FlowAnalysis.DataFlow.CopyAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.DependencyInjection;
+using Newtonsoft.Json;
 
 namespace CodeSharpenerCryptoAnalyzer
 {
@@ -104,49 +106,12 @@ namespace CodeSharpenerCryptoAnalyzer
             services.AddTransient<IEventSectionAnalyzer, EventsSectionAnalyzer>();
             services.AddTransient<IConstraintsSectionAnalyzer, ConstraintsSectionAnalyzer>();
             services.AddTransient<IOrderSectionAnalyzer, OrderSectionAnalyzer>();
+            services.AddTransient<ICryslConfigurationBuilder, CryslConfigurationBuilder>();
             services.AddSingleton<ICryslObjectBuilder, CryslObjectBuilder>();
             _serviceProvider = services.BuildServiceProvider();
         }
 
         public override void Initialize(AnalysisContext context)
-        {
-            ICryslObjectBuilder cSharpObjectBuilder = _serviceProvider.GetService<ICryslObjectBuilder>();
-            if (_cryslSpecificationModel == null)
-            {
-                _cryslSpecificationModel = new Dictionary<string, CryslJsonModel>();
-            }
-
-            //Check for different Crysl files
-            var currentDirectory = Directory.GetParent(Directory.GetCurrentDirectory()).Parent.Parent.FullName;
-            var cryslPath = Path.Combine(currentDirectory, "CrySL");
-            string[] cryslFiles = Directory.GetFiles(cryslPath, "*.crysl");
-
-            foreach (var cryslFile in cryslFiles)
-            {
-                CryslResult cryslCompilationModel = cSharpObjectBuilder.CryslToCSharpBuilder(cryslFile);
-                if (cryslCompilationModel.IsValid && !_cryslSpecificationModel.Values.Contains(cryslCompilationModel.CryslModel))
-                {
-                    if (_cryslSpecificationModel.ContainsKey(cryslFile))
-                    {
-                        lock (_cryslSpecificationModel)
-                        {
-                            _cryslSpecificationModel.Remove(cryslFile);
-                            _cryslSpecificationModel.Add(cryslFile, cryslCompilationModel.CryslModel);
-                        }
-                    }
-                    else
-                    {
-                        lock (_cryslSpecificationModel)
-                        {
-                            _cryslSpecificationModel.Add(cryslFile, cryslCompilationModel.CryslModel);
-                        }
-                    }
-                }
-            }
-            InitializeContext(context);
-        }
-
-        public void InitializeContext(AnalysisContext context)
         {
             //Register all the syntax nodes that needs to be analyzed
             context.RegisterCodeBlockStartAction<SyntaxKind>(AnalyzeCodeBlockAction);
@@ -156,6 +121,7 @@ namespace CodeSharpenerCryptoAnalyzer
             context.RegisterSyntaxNodeAction(AnalyzeSimpleAssignmentExpression, SyntaxKind.SimpleAssignmentExpression);
             context.RegisterSyntaxNodeAction(AnalyzeLocalDeclarationStatement, SyntaxKind.LocalDeclarationStatement, SyntaxKind.FieldDeclaration);
             context.RegisterSyntaxNodeAction(AnalyzeMethodDeclarationNode, SyntaxKind.MethodDeclaration);
+            context.RegisterCompilationStartAction(AnalyzeCompilationAction);
 
 
             //All global assignements to analyzer goes below           
@@ -167,7 +133,6 @@ namespace CodeSharpenerCryptoAnalyzer
             {
                 TaintedContextDictionary = new Dictionary<string, List<KeyValuePair<ISymbol, ISymbol>>>();
             }
-
         }
 
         /*private static void AnalyzeSymbol(SymbolAnalysisContext context)
@@ -1084,6 +1049,46 @@ namespace CodeSharpenerCryptoAnalyzer
 
         }
 
+        private void AnalyzeCompilationAction(CompilationStartAnalysisContext context)
+        {
+            ICryslConfigurationBuilder cryslConfigurationBuilder = _serviceProvider.GetService<ICryslConfigurationBuilder>();
+            CryslSettings cryslConfigurations = cryslConfigurationBuilder.GetCryslConfigurations(context.Options.AdditionalFiles);
+
+            ICryslObjectBuilder cSharpObjectBuilder = _serviceProvider.GetService<ICryslObjectBuilder>();
+            if (_cryslSpecificationModel == null)
+            {
+                _cryslSpecificationModel = new Dictionary<string, CryslJsonModel>();
+            }
+
+            //Check for different Crysl files
+            if (Directory.Exists(cryslConfigurations.CryslConfiguration.CryslPath))
+            {
+                string[] cryslFiles = Directory.GetFiles(cryslConfigurations.CryslConfiguration.CryslPath, "*.crysl");
+                foreach (var cryslFile in cryslFiles)
+                {
+                    CryslResult cryslCompilationModel = cSharpObjectBuilder.CryslToCSharpBuilder(cryslFile);
+                    if (cryslCompilationModel.IsValid && !_cryslSpecificationModel.Values.Contains(cryslCompilationModel.CryslModel))
+                    {
+                        if (_cryslSpecificationModel.ContainsKey(cryslFile))
+                        {
+                            lock (_cryslSpecificationModel)
+                            {
+                                _cryslSpecificationModel.Remove(cryslFile);
+                                _cryslSpecificationModel.Add(cryslFile, cryslCompilationModel.CryslModel);
+                            }
+                        }
+                        else
+                        {
+                            lock (_cryslSpecificationModel)
+                            {
+                                _cryslSpecificationModel.Add(cryslFile, cryslCompilationModel.CryslModel);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         private void AnalyzeUsingBlock(OperationAnalysisContext context)
         {
             var currentEventsOrderDictionary = EventsOrderDictionary.ToImmutableSortedDictionary();
@@ -1130,7 +1135,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                         Dictionary<string, List<MethodSignatureModel>> validEventsDictionary = new Dictionary<string, List<MethodSignatureModel>>();
                                         ValidEventsDictionary.TryGetValue(cryslSpecificationModel.Spec_Section.Class_Name, out validEventsDictionary);
 
-                                        if(validEventsDictionary == null)
+                                        if (validEventsDictionary == null)
                                         {
                                             validEventsDictionary = new Dictionary<string, List<MethodSignatureModel>>();
                                             isEventDictionaryPresent = false;
@@ -1160,7 +1165,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                                 }
                                             }
 
-                                            if(isEventDictionaryPresent)
+                                            if (isEventDictionaryPresent)
                                             {
                                                 ValidEventsDictionary[cryslSpecificationModel.Spec_Section.Class_Name] = validEventsDictionary;
                                             }
@@ -1170,7 +1175,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                             }
                                         }
                                         else
-                                        { 
+                                        {
                                             List<MethodSignatureModel> methodSignatureModelList = new List<MethodSignatureModel>();
                                             methodSignatureModelList.Add(methodSignatureModel);
                                             lock (validEventsDictionary)
@@ -1183,7 +1188,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                                 eventsOrderDictionary.Add(new KeyValuePair<string, string>(cryptoMethods.FirstOrDefault().Event_Var_Name, cryptoMethods.FirstOrDefault().Method_Name));
                                             }
 
-                                            if(isEventDictionaryPresent)
+                                            if (isEventDictionaryPresent)
                                             {
                                                 ValidEventsDictionary[cryslSpecificationModel.Spec_Section.Class_Name] = validEventsDictionary;
                                             }
@@ -1331,7 +1336,7 @@ namespace CodeSharpenerCryptoAnalyzer
                 Dictionary<string, List<MethodSignatureModel>> validEventsDictionary = new Dictionary<string, List<MethodSignatureModel>>();
                 ValidEventsDictionary.TryGetValue(cryslSpecSection, out validEventsDictionary);
 
-                if(validEventsDictionary == null)
+                if (validEventsDictionary == null)
                 {
                     validEventsDictionary = new Dictionary<string, List<MethodSignatureModel>>();
                     isEventDictionaryPresent = false;
@@ -1365,7 +1370,7 @@ namespace CodeSharpenerCryptoAnalyzer
                     eventsOrderDictionary.Add(new KeyValuePair<string, string>(aggregatorName, methodName));
                 }
 
-                if(isEventDictionaryPresent)
+                if (isEventDictionaryPresent)
                 {
                     ValidEventsDictionary[cryslSpecSection] = validEventsDictionary;
                 }
@@ -1380,7 +1385,7 @@ namespace CodeSharpenerCryptoAnalyzer
                 Dictionary<string, List<MethodSignatureModel>> validEventsDictionary = new Dictionary<string, List<MethodSignatureModel>>();
                 ValidEventsDictionary.TryGetValue(cryslSpecSection, out validEventsDictionary);
 
-                if(validEventsDictionary == null)
+                if (validEventsDictionary == null)
                 {
                     validEventsDictionary = new Dictionary<string, List<MethodSignatureModel>>();
                     isEventDictionaryPresent = false;
@@ -1413,7 +1418,7 @@ namespace CodeSharpenerCryptoAnalyzer
                     eventsOrderDictionary.Add(new KeyValuePair<string, string>(aggregatorName, methodName));
                 }
 
-                if(isEventDictionaryPresent)
+                if (isEventDictionaryPresent)
                 {
                     ValidEventsDictionary[cryslSpecSection] = validEventsDictionary;
                 }
