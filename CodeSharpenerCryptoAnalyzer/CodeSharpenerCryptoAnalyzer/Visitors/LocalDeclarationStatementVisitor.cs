@@ -32,10 +32,37 @@ namespace CodeSharpenerCryptoAnalyzer.Visitors
             base.VisitVariableDeclarator(node);
         }
 
+        public override void VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
+        {
+            if (node.ArgumentList != null)
+            {
+                foreach (var argument in node.ArgumentList.Arguments)
+                {
+                    var literalExpression = argument.ChildNodes().OfType<LiteralExpressionSyntax>();
+                    foreach (var literal in literalExpression)
+                    {
+                        if (literal.IsKind(SyntaxKind.StringLiteralExpression))
+                        {
+                            IsStringLiteralExpressionPresent = true;
+                        }
+                    }
+                }
+            }            
+        }
+
         public override void VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
         {
             //Do not call the base visitor as member access expressions should not be tainted in local declaration statement syntax types
             IsMemberAccessExpressionPresent = true;
+            var literalExpressionNodes = node.ChildNodes().OfType<LiteralExpressionSyntax>();
+
+            foreach(var literalNode in literalExpressionNodes)
+            {
+                if(literalNode.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    IsStringLiteralExpressionPresent = true;
+                }
+            }
         }
 
         public override void VisitInitializerExpression(InitializerExpressionSyntax node)
@@ -45,6 +72,17 @@ namespace CodeSharpenerCryptoAnalyzer.Visitors
                 IsArrayInitializerPresent = true;
             }
 
+        }
+
+        public override void VisitAssignmentExpression(AssignmentExpressionSyntax node)
+        {
+            if(node.Right != null)
+            {
+                if(node.Right.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    IsStringLiteralExpressionPresent = true;
+                }
+            }
         }
 
         public override void VisitEqualsValueClause(EqualsValueClauseSyntax node)
@@ -58,6 +96,22 @@ namespace CodeSharpenerCryptoAnalyzer.Visitors
                 }
             }
             base.VisitEqualsValueClause(node);
+        }
+
+        public override void VisitBinaryExpression(BinaryExpressionSyntax node)       
+        {
+            if(node.IsKind(SyntaxKind.AddExpression) || node.IsKind(SyntaxKind.SubtractExpression))
+            {
+                var literalExpressionNodes = node.ChildNodes().OfType<LiteralExpressionSyntax>();
+                foreach(var literalExpression in literalExpressionNodes)
+                {
+                    if(literalExpression.IsKind(SyntaxKind.StringLiteralExpression))
+                    {
+                        IsStringLiteralExpressionPresent = true;
+                        break;
+                    }
+                }
+            }
         }
 
         public override void VisitIdentifierName(IdentifierNameSyntax node)
