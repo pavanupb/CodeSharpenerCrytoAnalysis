@@ -33,6 +33,15 @@ namespace CodeSharpenerCryptoAnalyzer.Visitors
                     AssignmentExpressionSyntax = node;
                 }
             }
+
+            else if(node.Kind().Equals(SyntaxKind.SimpleAssignmentExpression))
+            {
+                if(node.Right.Kind().Equals(SyntaxKind.StringLiteralExpression))
+                {
+                    AssignmentExpressionSyntax = node;
+                    IsStringLiteralExpressionPresent = true;                    
+                }
+            }
         }
 
         public StringLiteralExpressionResult GetAssignmentExpressionResult()

@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace CodeSharpenerCryptoAnalyzer.Test.Targets
 {
-    public class AliasViaParameters
+    public class AliasViaParametersTest
     {
         public void aliasViaParameter()
         {

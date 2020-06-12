@@ -29,7 +29,7 @@ namespace CodeSharpenerCryptoAnalysis.Test
                 Severity = DiagnosticSeverity.Warning,
                 Locations =
                                 new[] {
-                                        new DiagnosticResultLocation(path, 13, 13)
+                                        new DiagnosticResultLocation("Test0.cs", 13, 13)
                                     }
             };
 
@@ -40,7 +40,7 @@ namespace CodeSharpenerCryptoAnalysis.Test
                 Severity = DiagnosticSeverity.Warning,
                 Locations =
                                 new[] {
-                                        new DiagnosticResultLocation(path, 15, 17)
+                                        new DiagnosticResultLocation("Test0.cs", 15, 17)
                                     }
             };
 
@@ -63,7 +63,7 @@ namespace CodeSharpenerCryptoAnalysis.Test
                 Severity = DiagnosticSeverity.Warning,
                 Locations =
                                 new[] {
-                                        new DiagnosticResultLocation(path, 13, 13)
+                                        new DiagnosticResultLocation("Test0.cs", 13, 13)
                                     }
             };
 
@@ -74,7 +74,7 @@ namespace CodeSharpenerCryptoAnalysis.Test
                 Severity = DiagnosticSeverity.Warning,
                 Locations =
                                 new[] {
-                                        new DiagnosticResultLocation(path, 14, 40)
+                                        new DiagnosticResultLocation("Test0.cs", 14, 40)
                                     }
             };
 
@@ -85,7 +85,7 @@ namespace CodeSharpenerCryptoAnalysis.Test
                 Severity = DiagnosticSeverity.Warning,
                 Locations =
                                 new[] {
-                                        new DiagnosticResultLocation(path, 15, 35)
+                                        new DiagnosticResultLocation("Test0.cs", 15, 35)
                                     }
             };
 
@@ -108,7 +108,7 @@ namespace CodeSharpenerCryptoAnalysis.Test
                 Severity = DiagnosticSeverity.Warning,
                 Locations =
                                 new[] {
-                                        new DiagnosticResultLocation(path, 13, 13)
+                                        new DiagnosticResultLocation("Test0.cs", 13, 13)
                                     }
             };
 
@@ -119,7 +119,7 @@ namespace CodeSharpenerCryptoAnalysis.Test
                 Severity = DiagnosticSeverity.Warning,
                 Locations =
                                 new[] {
-                                        new DiagnosticResultLocation(path, 14, 13)
+                                        new DiagnosticResultLocation("Test0.cs", 14, 13)
                                     }
             };
 
@@ -142,7 +142,7 @@ namespace CodeSharpenerCryptoAnalysis.Test
                 Severity = DiagnosticSeverity.Warning,
                 Locations =
                                 new[] {
-                                        new DiagnosticResultLocation(path, 13, 13)
+                                        new DiagnosticResultLocation("Test0.cs", 13, 13)
                                     }
             };
 
@@ -153,7 +153,7 @@ namespace CodeSharpenerCryptoAnalysis.Test
                 Severity = DiagnosticSeverity.Warning,
                 Locations =
                                 new[] {
-                                        new DiagnosticResultLocation(path, 14, 13)
+                                        new DiagnosticResultLocation("Test0.cs", 14, 13)
                                     }
             };
 
@@ -164,7 +164,7 @@ namespace CodeSharpenerCryptoAnalysis.Test
                 Severity = DiagnosticSeverity.Warning,
                 Locations =
                                 new[] {
-                                        new DiagnosticResultLocation(path, 15, 24)
+                                        new DiagnosticResultLocation("Test0.cs", 15, 24)
                                     }
             };
 
@@ -187,7 +187,7 @@ namespace CodeSharpenerCryptoAnalysis.Test
                 Severity = DiagnosticSeverity.Warning,
                 Locations =
                                 new[] {
-                                        new DiagnosticResultLocation(path, 13, 13)
+                                        new DiagnosticResultLocation("Test0.cs", 13, 13)
                                     }
             };
 
@@ -198,12 +198,23 @@ namespace CodeSharpenerCryptoAnalysis.Test
                 Severity = DiagnosticSeverity.Warning,
                 Locations =
                                 new[] {
-                                        new DiagnosticResultLocation(path, 14, 29)
+                                        new DiagnosticResultLocation("Test0.cs", 14, 29)
                                     }
             };
-            
 
-            VerifyCSharpDiagnostic(test, expectedTaint1, expectedTaint2);
+            var expectedTaint3 = new DiagnosticResult
+            {
+                Id = "HardCodedKey",
+                Message = String.Format("Hard-Coded Key and IV value could lead to Security Vulnerability"),
+                Severity = DiagnosticSeverity.Warning,
+                Locations =
+                                new[] {
+                                        new DiagnosticResultLocation("Test0.cs", 19, 13)
+                                    }
+            };
+
+
+            VerifyCSharpDiagnostic(test, expectedTaint1, expectedTaint2, expectedTaint3);
         }
 
         protected override DiagnosticAnalyzer GetCSharpDiagnosticAnalyzer()

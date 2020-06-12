@@ -4,13 +4,13 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace CodeSharpenerCryptoAnalyzer.Test.Targets
+namespace CodeSharpenerCryptoAnalyzer.Test.Targets.AliasViaParameter
 {
     public class CallPOITest
     {
         public void indirectAllocationSite3Address()
         {
-            A a = new A();           
+            A a = new A();
             B load = a.b;
             string alias = load.c;
             //query for alias
@@ -20,7 +20,7 @@ namespace CodeSharpenerCryptoAnalyzer.Test.Targets
 
     public class A
     {
-        public B b { get; set; }        
+        public B b { get; set; }
 
     }
 
@@ -29,3 +29,4 @@ namespace CodeSharpenerCryptoAnalyzer.Test.Targets
         public string c { get; set; }
     }
 }
+

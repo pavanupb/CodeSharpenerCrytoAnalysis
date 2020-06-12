@@ -98,6 +98,11 @@ namespace CodeSharpenerCryptoAnalyzer.Visitors
             base.VisitEqualsValueClause(node);
         }
 
+        public override void VisitArrayCreationExpression(ArrayCreationExpressionSyntax node)
+        {
+            base.VisitArrayCreationExpression(node);
+        }
+
         public override void VisitBinaryExpression(BinaryExpressionSyntax node)       
         {
             if(node.IsKind(SyntaxKind.AddExpression) || node.IsKind(SyntaxKind.SubtractExpression))

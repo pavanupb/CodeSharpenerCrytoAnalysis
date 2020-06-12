@@ -15,5 +15,8 @@ namespace CodeSharpenerCryptoAnalyzer.CryslBuilder.Models.CSharpModels
     {
         [JsonProperty("crysl_path")]
         public string CryslPath { get; set; }
+
+        [JsonProperty("is_taintanalysis_off")]
+        public bool IsTaintAnalysisOff { get; set; }
     }
 }

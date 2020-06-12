@@ -8,6 +8,7 @@ using System.Threading;
 using CodeSharpenerCryptoAnalysis.AnalyzerModels;
 using CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers;
 using CodeSharpenerCryptoAnalysis.Models;
+using CodeSharpenerCryptoAnalyzer.AnalyzerModels;
 using CodeSharpenerCryptoAnalyzer.CryslBuilder;
 using CodeSharpenerCryptoAnalyzer.CryslBuilder.Models.CSharpModels;
 using CodeSharpenerCryptoAnalyzer.Visitors;
@@ -20,6 +21,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.FlowAnalysis.DataFlow;
 using Microsoft.CodeAnalysis.FlowAnalysis.DataFlow.CopyAnalysis;
+using Microsoft.CodeAnalysis.FlowAnalysis.DataFlow.PointsToAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
@@ -97,6 +99,10 @@ namespace CodeSharpenerCryptoAnalyzer
 
         private static List<CryslJsonModel> CryslSectionList;
 
+        private bool IsCryslFilePresent;
+
+        private bool IsTaintAnalysisOff;
+
 
 
         public CodeSharpenerCryptoAnalyzerAnalyzer()
@@ -109,6 +115,9 @@ namespace CodeSharpenerCryptoAnalyzer
             services.AddTransient<ICryslConfigurationBuilder, CryslConfigurationBuilder>();
             services.AddSingleton<ICryslObjectBuilder, CryslObjectBuilder>();
             _serviceProvider = services.BuildServiceProvider();
+
+            IsCryslFilePresent = false;
+            IsTaintAnalysisOff = false;
         }
 
         public override void Initialize(AnalysisContext context)
@@ -134,7 +143,7 @@ namespace CodeSharpenerCryptoAnalyzer
             {
                 TaintedContextDictionary = new Dictionary<string, List<KeyValuePair<ISymbol, ISymbol>>>();
             }
-        }        
+        }
 
         /*private static void AnalyzeSymbol(SymbolAnalysisContext context)
         {
@@ -165,25 +174,75 @@ namespace CodeSharpenerCryptoAnalyzer
             ToAnalyzeCryslSection = new Dictionary<string, List<CryslJsonModel>>();
             CryslSectionList = new List<CryslJsonModel>();
 
+            foreach(var taintedContextDictionary in TaintedContextDictionary)
+            {
+                foreach(var taintedValueDictionary in taintedContextDictionary.Value)
+                {
+                    if(taintedValueDictionary.Key.ToString().Equals(context.ContainingSymbol.ToString()))
+                    {
+                        TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(taintedValueDictionary.Key, taintedValueDictionary.Value));
+                    }
+                }
+            }
         }
 
         private void AnalyzeExpressionStatement(SyntaxNodeAnalysisContext context)
         {
-            var expressionStatementNode = (ExpressionStatementSyntax)context.Node;
-            ExpressionStatementVisitor expressionStatementVisitor = new ExpressionStatementVisitor();
-            expressionStatementVisitor.VisitExpressionStatement(expressionStatementNode);
-            var StringLiteralPresentResult = expressionStatementVisitor.GetAssignmentExpressionResult();
-
-            if(StringLiteralPresentResult.IsStringLiteralInitializer && StringLiteralPresentResult.ExpressionSyntax.Left != null)
+            if (IsCryslFilePresent && !IsTaintAnalysisOff)
             {
-                var leftExpressionSymbolInfo = context.SemanticModel.GetSymbolInfo(StringLiteralPresentResult.ExpressionSyntax.Left).Symbol;
-                
-                if (!IsTaintedValueExists(context.ContainingSymbol, leftExpressionSymbolInfo))
+                var expressionStatementNode = (ExpressionStatementSyntax)context.Node;
+                ExpressionStatementVisitor expressionStatementVisitor = new ExpressionStatementVisitor();
+                expressionStatementVisitor.VisitExpressionStatement(expressionStatementNode);
+                var StringLiteralPresentResult = expressionStatementVisitor.GetAssignmentExpressionResult();
+
+                if (StringLiteralPresentResult.IsStringLiteralInitializer && StringLiteralPresentResult.ExpressionSyntax.Left != null)
                 {
-                    TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(leftExpressionSymbolInfo.ContainingSymbol, leftExpressionSymbolInfo));
+                    var leftExpressionSymbolInfo = context.SemanticModel.GetSymbolInfo(StringLiteralPresentResult.ExpressionSyntax.Left).Symbol;
+
+                    if (!IsTaintedValueExists(leftExpressionSymbolInfo.ContainingSymbol, leftExpressionSymbolInfo))
+                    {
+                        TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(leftExpressionSymbolInfo.ContainingSymbol, leftExpressionSymbolInfo));
+                    }
+                    var diagnostics = Diagnostic.Create(HardCodedCheckViolationRule, StringLiteralPresentResult.ExpressionSyntax.GetLocation());
+                    context.ReportDiagnostic(diagnostics);
                 }
-                var diagnostics = Diagnostic.Create(HardCodedCheckViolationRule, StringLiteralPresentResult.ExpressionSyntax.GetLocation());
-                context.ReportDiagnostic(diagnostics);
+
+                var simpleAssignmentExpression = expressionStatementNode.ChildNodes().OfType<AssignmentExpressionSyntax>();
+                foreach (var assignmentExpression in simpleAssignmentExpression)
+                {
+                    if (assignmentExpression.IsKind(SyntaxKind.SimpleAssignmentExpression) && assignmentExpression.Left != null && assignmentExpression.Right != null)
+                    {
+                        var rightSymbolInfo = context.SemanticModel.GetSymbolInfo(assignmentExpression.Right);
+                        if (rightSymbolInfo.Symbol != null)
+                        {
+                            if (IsTaintedValueExists(rightSymbolInfo.Symbol.ContainingSymbol, rightSymbolInfo.Symbol))
+                            {
+                                var leftSymbolInfo = context.SemanticModel.GetSymbolInfo(assignmentExpression.Left);
+                                if (leftSymbolInfo.Symbol != null)
+                                {
+                                    if (!IsTaintedValueExists(leftSymbolInfo.Symbol.ContainingSymbol, leftSymbolInfo.Symbol))
+                                    {
+                                        lock (TaintedValuesDictionary)
+                                        {
+                                            TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(leftSymbolInfo.Symbol.ContainingSymbol, leftSymbolInfo.Symbol));
+                                        }
+                                    }
+                                }
+                                var diagnostics = Diagnostic.Create(HardCodedCheckViolationRule, expressionStatementNode.GetLocation());
+                                context.ReportDiagnostic(diagnostics);
+                            }
+
+                            else if (!IsTaintedValueExists(rightSymbolInfo.Symbol.ContainingSymbol, rightSymbolInfo.Symbol))
+                            {
+                                var leftSymbolInfo = context.SemanticModel.GetSymbolInfo(assignmentExpression.Left);
+                                if (leftSymbolInfo.Symbol != null)
+                                {
+                                    SanitizeTaintValue(leftSymbolInfo.Symbol.ContainingSymbol, leftSymbolInfo.Symbol);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -193,75 +252,78 @@ namespace CodeSharpenerCryptoAnalyzer
         /// <param name="context"></param>
         private void AnalyzeLocalDeclarationStatement(SyntaxNodeAnalysisContext context)
         {
-            var localDeclarationStatement = context.Node;
-            LocalDeclarationStatementVisitor localDeclarationStatementVisitor = new LocalDeclarationStatementVisitor();
-            localDeclarationStatementVisitor.Visit(localDeclarationStatement);
-
-            var isIdentifierNameNode = localDeclarationStatementVisitor.GetIdentifierNameSyntaxResult();
-            if (isIdentifierNameNode.IsIdentifierPresent)
+            if (IsCryslFilePresent && !IsTaintAnalysisOff)
             {
-                var identifierSymbolInfo = context.SemanticModel.GetSymbolInfo(isIdentifierNameNode.IdentifierNameSyntaxNode).Symbol;
-                if (identifierSymbolInfo != null && identifierSymbolInfo.ContainingSymbol != null)
+                var localDeclarationStatement = context.Node;
+                LocalDeclarationStatementVisitor localDeclarationStatementVisitor = new LocalDeclarationStatementVisitor();
+                localDeclarationStatementVisitor.Visit(localDeclarationStatement);
+
+                var isIdentifierNameNode = localDeclarationStatementVisitor.GetIdentifierNameSyntaxResult();
+                if (isIdentifierNameNode.IsIdentifierPresent)
                 {
-                    if (IsTaintedValueExists(identifierSymbolInfo.ContainingSymbol, identifierSymbolInfo))
+                    var identifierSymbolInfo = context.SemanticModel.GetSymbolInfo(isIdentifierNameNode.IdentifierNameSyntaxNode).Symbol;
+                    if (identifierSymbolInfo != null && identifierSymbolInfo.ContainingSymbol != null)
                     {
-                        var declaratorSymbolInfo = context.SemanticModel.GetDeclaredSymbol(isIdentifierNameNode.VariableDeclarator);
-                        if (!IsTaintedValueExists(declaratorSymbolInfo.ContainingSymbol, declaratorSymbolInfo))
+                        if (IsTaintedValueExists(identifierSymbolInfo.ContainingSymbol, identifierSymbolInfo))
                         {
-                            lock (TaintedValuesDictionary)
+                            var declaratorSymbolInfo = context.SemanticModel.GetDeclaredSymbol(isIdentifierNameNode.VariableDeclarator);
+                            if (!IsTaintedValueExists(declaratorSymbolInfo.ContainingSymbol, declaratorSymbolInfo))
                             {
-                                TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(declaratorSymbolInfo.ContainingSymbol, declaratorSymbolInfo));
+                                lock (TaintedValuesDictionary)
+                                {
+                                    TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(declaratorSymbolInfo.ContainingSymbol, declaratorSymbolInfo));
+                                }
                             }
+                            var diagnostics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
+                            context.ReportDiagnostic(diagnostics);
                         }
-                        var diagnostics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
-                        context.ReportDiagnostic(diagnostics);
-                    }
-                }
-            }
-
-            var isArrayInitializerPresent = localDeclarationStatementVisitor.GetByteArrayResult();
-            if (isArrayInitializerPresent.IsArrayInitializer)
-            {
-                //Adding to Tainted Dictionary for all Byte ArrayInitializer Types
-                var nodeSymbolInfo = context.SemanticModel.GetDeclaredSymbol(isArrayInitializerPresent.DeclaratorSyntax);
-                if (!IsTaintedValueExists(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo))
-                {
-                    lock (TaintedValuesDictionary)
-                    {
-                        TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo));
-                    }
-                }
-                if (!localDeclarationStatement.Kind().Equals(SyntaxKind.FieldDeclaration))
-                {
-                    var dataFlowAnalysisResult = context.SemanticModel.AnalyzeDataFlow(localDeclarationStatement);
-                    if (dataFlowAnalysisResult.ReadOutside.Contains(nodeSymbolInfo))
-                    {
-                        var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
-                        context.ReportDiagnostic(diagnsotics);
-                    }
-                }
-            }
-
-            var isStringInitializerPresent = localDeclarationStatementVisitor.GetStringLiteralResult();
-            if (isStringInitializerPresent.IsStringLiteralInitializer)
-            {
-                //Adding to Tainted Dictionary for all Byte ArrayInitializer Types
-                var nodeSymbolInfo = context.SemanticModel.GetDeclaredSymbol(isStringInitializerPresent.DeclaratorSyntax);
-                if (!IsTaintedValueExists(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo))
-                {
-                    lock (TaintedValuesDictionary)
-                    {
-                        TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo));
                     }
                 }
 
-                if (!localDeclarationStatement.Kind().Equals(SyntaxKind.FieldDeclaration))
+                var isArrayInitializerPresent = localDeclarationStatementVisitor.GetByteArrayResult();
+                if (isArrayInitializerPresent.IsArrayInitializer)
                 {
-                    var dataFlowAnalysisResult = context.SemanticModel.AnalyzeDataFlow(localDeclarationStatement);
-                    if (dataFlowAnalysisResult.ReadOutside.Contains(nodeSymbolInfo))
+                    //Adding to Tainted Dictionary for all Byte ArrayInitializer Types
+                    var nodeSymbolInfo = context.SemanticModel.GetDeclaredSymbol(isArrayInitializerPresent.DeclaratorSyntax);
+                    if (!IsTaintedValueExists(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo))
                     {
-                        var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
-                        context.ReportDiagnostic(diagnsotics);
+                        lock (TaintedValuesDictionary)
+                        {
+                            TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo));
+                        }
+                    }
+                    if (!localDeclarationStatement.Kind().Equals(SyntaxKind.FieldDeclaration))
+                    {
+                        var dataFlowAnalysisResult = context.SemanticModel.AnalyzeDataFlow(localDeclarationStatement);
+                        if (dataFlowAnalysisResult.ReadOutside.Contains(nodeSymbolInfo))
+                        {
+                            var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
+                            context.ReportDiagnostic(diagnsotics);
+                        }
+                    }
+                }
+
+                var isStringInitializerPresent = localDeclarationStatementVisitor.GetStringLiteralResult();
+                if (isStringInitializerPresent.IsStringLiteralInitializer)
+                {
+                    //Adding to Tainted Dictionary for all Byte ArrayInitializer Types
+                    var nodeSymbolInfo = context.SemanticModel.GetDeclaredSymbol(isStringInitializerPresent.DeclaratorSyntax);
+                    if (!IsTaintedValueExists(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo))
+                    {
+                        lock (TaintedValuesDictionary)
+                        {
+                            TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(nodeSymbolInfo.ContainingSymbol, nodeSymbolInfo));
+                        }
+                    }
+
+                    if (!localDeclarationStatement.Kind().Equals(SyntaxKind.FieldDeclaration))
+                    {
+                        var dataFlowAnalysisResult = context.SemanticModel.AnalyzeDataFlow(localDeclarationStatement);
+                        if (dataFlowAnalysisResult.ReadOutside.Contains(nodeSymbolInfo))
+                        {
+                            var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
+                            context.ReportDiagnostic(diagnsotics);
+                        }
                     }
                 }
             }
@@ -275,18 +337,18 @@ namespace CodeSharpenerCryptoAnalyzer
             var argumentsList = objectCreationNode.ChildNodes().OfType<ArgumentListSyntax>();
 
             //Check for tainted string arguments
-            foreach(var argumentListSyntax in argumentsList)
+            foreach (var argumentListSyntax in argumentsList)
             {
                 var argumentSyntaxList = argumentListSyntax.Arguments;
-                if(argumentSyntaxList != null)
+                if (argumentSyntaxList != null)
                 {
-                    foreach(var arguments in argumentSyntaxList)
+                    foreach (var arguments in argumentSyntaxList)
                     {
                         var identifierArgumentNode = arguments.ChildNodes().OfType<IdentifierNameSyntax>();
-                        if(identifierArgumentNode.Count() != 0)
+                        if (identifierArgumentNode.Count() != 0)
                         {
                             var identifierSymbolInfo = context.SemanticModel.GetSymbolInfo(identifierArgumentNode.FirstOrDefault()).Symbol;
-                            if (IsTaintedValueExists(context.ContainingSymbol, identifierSymbolInfo))
+                            if (IsTaintedValueExists(identifierSymbolInfo.ContainingSymbol, identifierSymbolInfo))
                             {
                                 var declaratorSyntaxNode = objectCreationNode.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>();
                                 if (declaratorSyntaxNode.Count() != 0)
@@ -491,31 +553,37 @@ namespace CodeSharpenerCryptoAnalyzer
                 {
                     var declaratorNode = identifierNode.FirstOrDefault().AncestorsAndSelf().OfType<VariableDeclaratorSyntax>();
                     ISymbol declaratorSymbolInfo = null;
-                    if(declaratorNode.Count() != 0)
+                    if (declaratorNode.Count() != 0)
                     {
                         declaratorSymbolInfo = context.SemanticModel.GetDeclaredSymbol(declaratorNode.FirstOrDefault());
-                    }                   
+                    }
 
                     //Check for any tainted invocations
                     var invocatorIdentifierSymbolInfo = context.SemanticModel.GetSymbolInfo(identifierNode.FirstOrDefault()).Symbol;
-                    if(IsTaintedValueExists(context.ContainingSymbol, invocatorIdentifierSymbolInfo))
+                    if (invocatorIdentifierSymbolInfo != null)
                     {
-                        if (!IsTaintedValueExists(context.ContainingSymbol, invocatorIdentifierSymbolInfo))
+                        if (IsTaintedValueExists(invocatorIdentifierSymbolInfo.ContainingSymbol, invocatorIdentifierSymbolInfo))
                         {
-                            lock (TaintedValuesDictionary)
+                            if (!IsTaintedValueExists(invocatorIdentifierSymbolInfo.ContainingSymbol, invocatorIdentifierSymbolInfo))
                             {
-                                TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(context.ContainingSymbol, invocatorIdentifierSymbolInfo));
-                            }                            
-                        }
-                        if (!IsTaintedValueExists(context.ContainingSymbol, declaratorSymbolInfo))
-                        {
-                            lock (TaintedValuesDictionary)
-                            {
-                                TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(context.ContainingSymbol, declaratorSymbolInfo));
+                                lock (TaintedValuesDictionary)
+                                {
+                                    TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(invocatorIdentifierSymbolInfo.ContainingSymbol, invocatorIdentifierSymbolInfo));
+                                }
                             }
+                            if (declaratorSymbolInfo != null)
+                            {
+                                if (!IsTaintedValueExists(declaratorSymbolInfo.ContainingSymbol, declaratorSymbolInfo))
+                                {
+                                    lock (TaintedValuesDictionary)
+                                    {
+                                        TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(declaratorSymbolInfo.ContainingSymbol, declaratorSymbolInfo));
+                                    }
+                                }
+                            }
+                            var taintedDiagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, node.GetLocation());
+                            context.ReportDiagnostic(taintedDiagnsotics);
                         }
-                        var taintedDiagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, node.GetLocation());
-                        context.ReportDiagnostic(taintedDiagnsotics);
                     }
 
                     var invocatorIdentifier = identifierNode.FirstOrDefault();
@@ -705,13 +773,13 @@ namespace CodeSharpenerCryptoAnalyzer
                             var argumentSymbol = context.SemanticModel.GetSymbolInfo(memAccessExpr).Symbol;
                             if (argumentSymbol != null)
                             {
-                                if (IsTaintedValueExists(context.ContainingSymbol, argumentSymbol))
-                                {
+                                if (IsTaintedValueExists(argumentSymbol.ContainingSymbol, argumentSymbol))
+                                {                                    
                                     var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, memAccessExpr.GetLocation());
                                     context.ReportDiagnostic(diagnsotics);
                                     if (invExprSymbolInfo != null)
                                     {
-                                        if (!IsTaintedValueExists(invExprSymbolInfo.ContainingSymbol, invExprSymbolInfo.Parameters[i]))
+                                        if (!IsTaintedValueExists(invExprSymbolInfo, invExprSymbolInfo.Parameters[i]))
                                         {
                                             lock (TaintedValuesDictionary)
                                             {
@@ -731,13 +799,30 @@ namespace CodeSharpenerCryptoAnalyzer
                             var identifierSymbolInfo = context.SemanticModel.GetSymbolInfo(identifierNameNode).Symbol;
                             if (identifierSymbolInfo != null)
                             {
-                                if (IsTaintedValueExists(context.ContainingSymbol, identifierSymbolInfo))
+                                if (IsTaintedValueExists(identifierSymbolInfo.ContainingSymbol, identifierSymbolInfo))
                                 {
-                                    var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, identifierNameNode.GetLocation());
-                                    context.ReportDiagnostic(diagnsotics);
+                                    var variableDeclaratorResult = GetVariableDeclarator(invocationExpressionNode, context);
+                                    // Taint Variable Declarator only for methods containing inside "System" namespace and not for any user defined methods.
+                                    if (variableDeclaratorResult.IsVariableDeclaratorSyntaxPresent && invExprSymbolInfo.Name.Equals("ToBase64String"))
+                                    {
+                                        var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, variableDeclaratorResult.VariableDeclaratorSyntaxNode.GetLocation());
+                                        context.ReportDiagnostic(diagnsotics);
+                                        if (!IsTaintedValueExists(variableDeclaratorResult.VariableDeclaratorSymbolInfo.ContainingSymbol, variableDeclaratorResult.VariableDeclaratorSymbolInfo))
+                                        {
+                                            lock (TaintedValuesDictionary)
+                                            {
+                                                TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(variableDeclaratorResult.VariableDeclaratorSymbolInfo.ContainingSymbol, variableDeclaratorResult.VariableDeclaratorSymbolInfo));
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, identifierNameNode.GetLocation());
+                                        context.ReportDiagnostic(diagnsotics);
+                                    }
                                     if (invExprSymbolInfo != null)
                                     {
-                                        if (!IsTaintedValueExists(invExprSymbolInfo.ContainingSymbol, invExprSymbolInfo.Parameters[i]))
+                                        if (!IsTaintedValueExists(invExprSymbolInfo, invExprSymbolInfo.Parameters[i]))
                                         {
                                             lock (TaintedValuesDictionary)
                                             {
@@ -748,10 +833,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                 }
                             }
                         }
-
                     }
-
-
                 }
             }
         }
@@ -784,15 +866,15 @@ namespace CodeSharpenerCryptoAnalyzer
                             var rightExprSymbolInfo = context.SemanticModel.GetSymbolInfo(simpleAssignExpr.Right).Symbol;
 
                             //Check for tainted values
-                            if (rightExprSymbolInfo != null)
+                            /*if (rightExprSymbolInfo != null && leftExprSymbolInfo != null)
                             {
-                                if (IsTaintedValueExists(context.ContainingSymbol, rightExprSymbolInfo))
+                                if (IsTaintedValueExists(rightExprSymbolInfo.ContainingSymbol, rightExprSymbolInfo))
                                 {
-                                    if (!IsTaintedValueExists(context.ContainingSymbol, leftExprSymbolInfo))
+                                    if (!IsTaintedValueExists(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo))
                                     {
                                         lock (TaintedValuesDictionary)
                                         {
-                                            TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(context.ContainingSymbol, leftExprSymbolInfo));
+                                            TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo));
                                         }
                                         var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, simpleAssExpr.GetLocation());
                                         context.ReportDiagnostic(diagnsotics);
@@ -804,7 +886,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                         context.ReportDiagnostic(diagnsotics);
                                     }
                                 }
-                            }
+                            }*/
                             //Analze only if type is of SPEC type
                             foreach (var cryslSpecificationModel in _cryslSpecificationModel.Values)
                             {
@@ -901,22 +983,25 @@ namespace CodeSharpenerCryptoAnalyzer
                                         //Report Diagnostics as not a Valid Event
                                     }
                                     //Check if tainted variables are santized
-                                    if (IsTaintedValueExists(context.ContainingSymbol, leftExprSymbolInfo))
+                                    if (leftExprSymbolInfo != null)
                                     {
-                                        if (rightExprSymbolInfo != null)
+                                        if (IsTaintedValueExists(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo))
                                         {
-                                            if (!IsTaintedValueExists(context.ContainingSymbol, rightExprSymbolInfo))
+                                            if (rightExprSymbolInfo != null)
                                             {
-                                                if (TaintedValuesDictionary.Count != 0)
+                                                if (!IsTaintedValueExists(rightExprSymbolInfo.ContainingSymbol, rightExprSymbolInfo))
                                                 {
-                                                    lock (TaintedValuesDictionary)
+                                                    if (TaintedValuesDictionary.Count != 0)
                                                     {
-                                                        TaintedValuesDictionary.Remove(new KeyValuePair<ISymbol, ISymbol>(context.ContainingSymbol, leftExprSymbolInfo));
+                                                        lock (TaintedValuesDictionary)
+                                                        {
+                                                            TaintedValuesDictionary.Remove(new KeyValuePair<ISymbol, ISymbol>(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo));
+                                                        }
                                                     }
-                                                }
-                                                else
-                                                {
-                                                    SanitizeTaintValue(context.ContainingSymbol, leftExprSymbolInfo);
+                                                    else
+                                                    {
+                                                        SanitizeTaintValue(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo);
+                                                    }
                                                 }
                                             }
                                         }
@@ -925,25 +1010,41 @@ namespace CodeSharpenerCryptoAnalyzer
 
                                 else
                                 {   //Check if tainted variables are santized
-                                    if (IsTaintedValueExists(context.ContainingSymbol, leftExprSymbolInfo))
+                                    if (leftExprSymbolInfo != null)
                                     {
-                                        if (rightExprSymbolInfo != null)
+                                        if (IsTaintedValueExists(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo))
                                         {
-                                            if (!IsTaintedValueExists(context.ContainingSymbol, rightExprSymbolInfo))
+                                            if (rightExprSymbolInfo != null)
                                             {
-                                                if (TaintedValuesDictionary.Count != 0)
+                                                if (!IsTaintedValueExists(rightExprSymbolInfo.ContainingSymbol, rightExprSymbolInfo))
                                                 {
-                                                    lock (TaintedValuesDictionary)
+                                                    if (TaintedValuesDictionary.Count != 0)
                                                     {
-                                                        TaintedValuesDictionary.Remove(new KeyValuePair<ISymbol, ISymbol>(context.ContainingSymbol, leftExprSymbolInfo));
+                                                        lock (TaintedValuesDictionary)
+                                                        {
+                                                            TaintedValuesDictionary.Remove(new KeyValuePair<ISymbol, ISymbol>(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo));
+                                                        }
                                                     }
-                                                }
-                                                else
-                                                {
-                                                    SanitizeTaintValue(context.ContainingSymbol, leftExprSymbolInfo);
+                                                    else
+                                                    {
+                                                        SanitizeTaintValue(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo);
+                                                    }
                                                 }
                                             }
                                         }
+                                    }
+                                }
+                            }
+
+                            //Check if right expression is sanitized
+                            if (rightExprSymbolInfo != null && leftExprSymbolInfo != null)
+                            {
+                                if (!IsTaintedValueExists(rightExprSymbolInfo.ContainingSymbol, rightExprSymbolInfo))
+                                {
+                                    //Sanitize the left expression if the right expression value is not tainted
+                                    if (IsTaintedValueExists(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo))
+                                    {
+                                        SanitizeTaintValue(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo);
                                     }
                                 }
                             }
@@ -957,15 +1058,15 @@ namespace CodeSharpenerCryptoAnalyzer
                     var rightExprSymbolInfo = context.SemanticModel.GetSymbolInfo(simpleAssignmentExpr.Right).Symbol;
 
                     //Check for tainted values
-                    if (rightExprSymbolInfo != null)
+                    if (rightExprSymbolInfo != null && leftExprSymbolInfo != null)
                     {
-                        if (IsTaintedValueExists(context.ContainingSymbol, rightExprSymbolInfo))
+                        if (IsTaintedValueExists(rightExprSymbolInfo.ContainingSymbol, rightExprSymbolInfo))
                         {
-                            if (!IsTaintedValueExists(context.ContainingSymbol, leftExprSymbolInfo))
+                            if (!IsTaintedValueExists(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo))
                             {
                                 lock (TaintedValuesDictionary)
                                 {
-                                    TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(context.ContainingSymbol, leftExprSymbolInfo));
+                                    TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo));
                                 }
                                 var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, simpleAssExpr.GetLocation());
                                 context.ReportDiagnostic(diagnsotics);
@@ -974,30 +1075,31 @@ namespace CodeSharpenerCryptoAnalyzer
                     }
 
                     //Check if tainted variables are santized
-                    if (IsTaintedValueExists(context.ContainingSymbol, leftExprSymbolInfo))
+                    if (leftExprSymbolInfo != null)
                     {
-                        if (rightExprSymbolInfo != null)
+                        if (IsTaintedValueExists(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo))
                         {
-                            if (!IsTaintedValueExists(context.ContainingSymbol, rightExprSymbolInfo))
+                            if (rightExprSymbolInfo != null)
                             {
-                                //Sanitize the value in the local TaintedValueDictionary
-                                if (TaintedValuesDictionary.Count != 0)
+                                if (!IsTaintedValueExists(rightExprSymbolInfo.ContainingSymbol, rightExprSymbolInfo))
                                 {
-                                    lock (TaintedValuesDictionary)
+                                    //Sanitize the value in the local TaintedValueDictionary
+                                    if (TaintedValuesDictionary.Count != 0)
                                     {
-                                        TaintedValuesDictionary.Remove(new KeyValuePair<ISymbol, ISymbol>(context.ContainingSymbol, leftExprSymbolInfo));
+                                        lock (TaintedValuesDictionary)
+                                        {
+                                            TaintedValuesDictionary.Remove(new KeyValuePair<ISymbol, ISymbol>(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo));
+                                        }
                                     }
+                                    //Sanitize the value in the global TaintedContextDictionary as well. 
+                                    //Sanitizing a method parameter would sanitize the parameter in caller as well as callee
+                                    SanitizeTaintValue(leftExprSymbolInfo.ContainingSymbol, leftExprSymbolInfo);
                                 }
-                                //Sanitize the value in the global TaintedContextDictionary as well. 
-                                //Sanitizing a method parameter would sanitize the parameter in caller as well as callee
-                                SanitizeTaintValue(context.ContainingSymbol, leftExprSymbolInfo);
                             }
                         }
                     }
-
                 }
             }
-
         }
 
         private static bool IsTaintedValueExists(ISymbol containingMethod, ISymbol nodeInfo)
@@ -1006,43 +1108,15 @@ namespace CodeSharpenerCryptoAnalyzer
             {
                 if (containingMethod != null && nodeInfo != null)
                 {
-                    List<KeyValuePair<ISymbol, ISymbol>> taintedDictionaryValues = new List<KeyValuePair<ISymbol, ISymbol>>();
-                    TaintedContextDictionary.TryGetValue(containingMethod.ToString(), out taintedDictionaryValues);
-                    if (taintedDictionaryValues != null)
-                    {
-                        foreach (var taintedValue in taintedDictionaryValues)
-                        {
-                            bool taintedValuePresent = (taintedValue.Key.ToString().Equals(containingMethod.ToString()) && taintedValue.Value.Kind.Equals(nodeInfo.Kind) && taintedValue.Value.ToString().Equals(nodeInfo.ToString()) && taintedValue.Value.Name.ToString().Equals(nodeInfo.Name.ToString())) ? true : false;
-
-                            if (taintedValuePresent)
-                            {
-                                return true;
-                            }
-                        }
-                    }
                     //If tainted values are not present in ContextDictionary check in Current TaintedValuesDictionary
-                    else
+                    //TaintedValuesDictionary need not be checked for context, because it contains only current context values
+                    foreach (var taintedValue in TaintedValuesDictionary)
                     {
-                        foreach (var taintedValue in TaintedValuesDictionary)
-                        {
-                            bool taintedValuePresent = (taintedValue.Key.ToString().Equals(containingMethod.ToString()) && taintedValue.Value.Kind.Equals(nodeInfo.Kind) && taintedValue.Value.ToString().Equals(nodeInfo.ToString()) && taintedValue.Value.Name.ToString().Equals(nodeInfo.Name.ToString())) ? true : false;
+                        bool taintedValuePresent = (taintedValue.Key.ToString().Equals(containingMethod.ToString()) && taintedValue.Value.Kind.Equals(nodeInfo.Kind) && taintedValue.Value.ToString().Equals(nodeInfo.ToString()) && taintedValue.Value.Name.ToString().Equals(nodeInfo.Name.ToString())) ? true : false;
 
-                            if (taintedValuePresent)
-                            {
-                                return true;
-                            }
-                        }
-
-                        foreach (var taintedValueDictionary in TaintedContextDictionary)
+                        if (taintedValuePresent)
                         {
-                            foreach (var taintedValue in taintedValueDictionary.Value)
-                            {
-                                bool taintedValuePresent = (taintedValue.Key.ToString().Equals(containingMethod.ToString()) && taintedValue.Value.Kind.Equals(nodeInfo.Kind) && taintedValue.Value.ToString().Equals(nodeInfo.ToString()) && taintedValue.Value.Name.ToString().Equals(nodeInfo.Name.ToString())) ? true : false;
-                                if (taintedValuePresent)
-                                {
-                                    return true;
-                                }
-                            }
+                            return true;
                         }
                     }
                 }
@@ -1056,27 +1130,30 @@ namespace CodeSharpenerCryptoAnalyzer
 
         private static void SanitizeTaintValue(ISymbol containingMethod, ISymbol nodeInfo)
         {
-            List<KeyValuePair<ISymbol, ISymbol>> sanitizedValues = new List<KeyValuePair<ISymbol, ISymbol>>();
-            foreach (var taintedValueDictionary in TaintedContextDictionary)
+            List<KeyValuePair<ISymbol, ISymbol>> sanitizedValues = new List<KeyValuePair<ISymbol, ISymbol>>();           
+
+            //TaintedValuesDictionary need not be checked for context, because it contains only current context values
+            foreach (var taintedValue in TaintedValuesDictionary)
             {
-                foreach (var taintedValue in taintedValueDictionary.Value)
+                bool taintedValuePresent = (taintedValue.Value.Kind.Equals(nodeInfo.Kind) && taintedValue.Value.ToString().Equals(nodeInfo.ToString()) && taintedValue.Value.Name.ToString().Equals(nodeInfo.Name.ToString())) ? true : false;
+                if (taintedValuePresent)
                 {
-                    bool taintedValuePresent = (taintedValue.Key.ToString().Equals(containingMethod.ToString()) && taintedValue.Value.Kind.Equals(nodeInfo.Kind) && taintedValue.Value.ToString().Equals(nodeInfo.ToString()) && taintedValue.Value.Name.ToString().Equals(nodeInfo.Name.ToString())) ? true : false;
-                    if (taintedValuePresent)
+                    lock (sanitizedValues)
                     {
-                        lock (sanitizedValues)
+                        if (!sanitizedValues.Contains(new KeyValuePair<ISymbol, ISymbol>(taintedValue.Key, taintedValue.Value)))
                         {
                             sanitizedValues.Add(new KeyValuePair<ISymbol, ISymbol>(taintedValue.Key, taintedValue.Value));
                         }
                     }
                 }
-                //Remove all the sanitized variables
-                foreach (var sanitizedVariables in sanitizedValues)
+            }
+
+            //Remove all the sanitized variables
+            foreach (var sanitizedVariables in sanitizedValues)
+            {
+                lock (TaintedValuesDictionary)
                 {
-                    lock (taintedValueDictionary.Value)
-                    {
-                        taintedValueDictionary.Value.Remove(sanitizedVariables);
-                    }
+                    TaintedValuesDictionary.Remove(sanitizedVariables);
                 }
             }
         }
@@ -1107,7 +1184,7 @@ namespace CodeSharpenerCryptoAnalyzer
         }
 
 
-        /*private void AnalyzeBlockAction(OperationBlockStartAnalysisContext context)
+        /*private void AnalyzeMethodAction(OperationAnalysisContext context)
         {
             WellKnownTypeProvider provider = WellKnownTypeProvider.GetOrCreate(context.Compilation);
 
@@ -1118,21 +1195,21 @@ namespace CodeSharpenerCryptoAnalyzer
                                                                     context.CancellationToken
                                                                     );
 
-            PointsToAnalysisResult pointsToAnalysisResult = PointsToAnalysis.TryGetOrComputeResult(
-                context.GetControlFlowGraph(context.OperationBlocks.Last()),
-                context.OwningSymbol,
+            var aliasAnalysisResult = CopyAnalysis.TryGetOrComputeResult(
+                context.GetControlFlowGraph(),
+                context.ContainingSymbol,
                 context.Options,
                 provider,
                 interproceduralAnalysisConfiguration,
                 interproceduralAnalysisPredicateOpt: null
-                ); 
-            
-            
+                );
+
         }*/
 
         private void AnalyzeUsingStartBlock(OperationBlockStartAnalysisContext context)
         {
             context.RegisterOperationAction(AnalyzeUsingBlock, OperationKind.Using);
+            //context.RegisterOperationAction(AnalyzeMethodAction, OperationKind.MethodBodyOperation);
 
         }
 
@@ -1150,6 +1227,8 @@ namespace CodeSharpenerCryptoAnalyzer
             //Check for different Crysl files
             if (Directory.Exists(cryslConfigurations.CryslConfiguration.CryslPath))
             {
+                IsTaintAnalysisOff = cryslConfigurations.CryslConfiguration.IsTaintAnalysisOff;                
+                IsCryslFilePresent = true;
                 string[] cryslFiles = Directory.GetFiles(cryslConfigurations.CryslConfiguration.CryslPath, "*.crysl");
                 foreach (var cryslFile in cryslFiles)
                 {
@@ -1173,7 +1252,7 @@ namespace CodeSharpenerCryptoAnalyzer
                         }
                     }
                 }
-            }
+            }            
         }
 
         private void AnalyzeUsingBlock(OperationAnalysisContext context)
@@ -1378,6 +1457,31 @@ namespace CodeSharpenerCryptoAnalyzer
 
         }
 
+        private static VariableDeclaratorSyntaxResult GetVariableDeclarator(SyntaxNode syntaxNode, SyntaxNodeAnalysisContext context)
+        {
+            var variableDeclaratorSyntax = syntaxNode.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>();
+            VariableDeclaratorSyntaxResult variableDeclaratorSyntaxResult = new VariableDeclaratorSyntaxResult(); 
+            if(variableDeclaratorSyntax.Count() > 0)
+            {
+                var variableDeclaratorSymbolInfo = context.SemanticModel.GetDeclaredSymbol(variableDeclaratorSyntax.FirstOrDefault());
+                if(variableDeclaratorSymbolInfo.Kind.Equals(SymbolKind.Local))
+                {
+                    var variableDeclaratorLocalInfo = (ILocalSymbol)variableDeclaratorSymbolInfo;
+                    if(variableDeclaratorLocalInfo.Type.ToString().Equals("byte[]"))
+                    {
+                        variableDeclaratorSyntaxResult.IsVariableDeclaratorSyntaxPresent = true;
+                        variableDeclaratorSyntaxResult.VariableDeclaratorSyntaxNode = variableDeclaratorSyntax.FirstOrDefault();
+                        variableDeclaratorSyntaxResult.VariableDeclaratorSymbolInfo = variableDeclaratorSymbolInfo;
+
+                    }
+                    
+                }
+                
+            }
+
+            return variableDeclaratorSyntaxResult;
+        }
+
         private static void AddEventsAndOrder(string aggregatorName, ValidEvents validEvents, string methodName, string containingSymbol, string cryslSpecSection, Dictionary<string, List<KeyValuePair<string, string>>> eventsOrderDict)
         {
             bool isCryslSpecPresent = true;
@@ -1550,7 +1654,6 @@ namespace CodeSharpenerCryptoAnalyzer
                     }
                 }
             }
-
         }
     }
 }

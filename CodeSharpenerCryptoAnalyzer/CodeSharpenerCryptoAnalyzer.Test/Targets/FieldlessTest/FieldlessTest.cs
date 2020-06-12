@@ -43,13 +43,13 @@ namespace CodeSharpenerCryptoAnalyzer.Test.Targets
             {
                 alias2 = alias1;
             }
-            //query for alias2
+            string query = alias2;
         }
 
         public void returnNullAllocation()
         {
             string alias2 = null;
-            //query for alias2
+            string query = alias2;
         }
 
 

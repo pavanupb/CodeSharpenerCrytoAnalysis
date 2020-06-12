@@ -29,6 +29,7 @@ namespace CodeSharpenerCryptoAnalyzer.Test.Targets
                 t = x.right;
             }
             string h = t;
+            string query = h;
             //query for h(should be tainted)
         }
 
@@ -42,13 +43,7 @@ namespace CodeSharpenerCryptoAnalyzer.Test.Targets
     public class Node
     {
         public string left { get; set; }
-        public string right { get; set; }
-        
-        public void setTaintedMessage()
-        {
-            left = "This is a secret message";
-            right = "This is another secret message";
-        }
+        public string right { get; set; } 
 
     }
 }
