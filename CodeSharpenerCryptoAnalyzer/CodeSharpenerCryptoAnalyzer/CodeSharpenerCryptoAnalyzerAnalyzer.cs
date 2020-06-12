@@ -217,7 +217,7 @@ namespace CodeSharpenerCryptoAnalyzer
                         {
                             if (IsTaintedValueExists(rightSymbolInfo.Symbol.ContainingSymbol, rightSymbolInfo.Symbol))
                             {
-                                var leftSymbolInfo = context.SemanticModel.GetSymbolInfo(assignmentExpression.Left);
+                                var leftSymbolInfo = context.SemanticModel.GetSymbolInfo(assignmentExpression.Left);                                
                                 if (leftSymbolInfo.Symbol != null)
                                 {
                                     if (!IsTaintedValueExists(leftSymbolInfo.Symbol.ContainingSymbol, leftSymbolInfo.Symbol))
@@ -348,22 +348,25 @@ namespace CodeSharpenerCryptoAnalyzer
                         if (identifierArgumentNode.Count() != 0)
                         {
                             var identifierSymbolInfo = context.SemanticModel.GetSymbolInfo(identifierArgumentNode.FirstOrDefault()).Symbol;
-                            if (IsTaintedValueExists(identifierSymbolInfo.ContainingSymbol, identifierSymbolInfo))
+                            if (identifierSymbolInfo != null)
                             {
-                                var declaratorSyntaxNode = objectCreationNode.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>();
-                                if (declaratorSyntaxNode.Count() != 0)
+                                if (IsTaintedValueExists(identifierSymbolInfo.ContainingSymbol, identifierSymbolInfo))
                                 {
-                                    var declaratorSymbolInfo = context.SemanticModel.GetDeclaredSymbol(declaratorSyntaxNode.FirstOrDefault());
-                                    if (!IsTaintedValueExists(declaratorSymbolInfo.ContainingSymbol, declaratorSymbolInfo))
+                                    var declaratorSyntaxNode = objectCreationNode.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>();
+                                    if (declaratorSyntaxNode.Count() != 0)
                                     {
-                                        lock (TaintedValuesDictionary)
+                                        var declaratorSymbolInfo = context.SemanticModel.GetDeclaredSymbol(declaratorSyntaxNode.FirstOrDefault());
+                                        if (!IsTaintedValueExists(declaratorSymbolInfo.ContainingSymbol, declaratorSymbolInfo))
                                         {
-                                            TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(declaratorSymbolInfo.ContainingSymbol, declaratorSymbolInfo));
+                                            lock (TaintedValuesDictionary)
+                                            {
+                                                TaintedValuesDictionary.Add(new KeyValuePair<ISymbol, ISymbol>(declaratorSymbolInfo.ContainingSymbol, declaratorSymbolInfo));
+                                            }
                                         }
                                     }
+                                    var diagnostics = Diagnostic.Create(HardCodedCheckViolationRule, arguments.GetLocation());
+                                    context.ReportDiagnostic(diagnostics);
                                 }
-                                var diagnostics = Diagnostic.Create(HardCodedCheckViolationRule, arguments.GetLocation());
-                                context.ReportDiagnostic(diagnostics);
                             }
                         }
                     }
@@ -803,7 +806,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                 {
                                     var variableDeclaratorResult = GetVariableDeclarator(invocationExpressionNode, context);
                                     // Taint Variable Declarator only for methods containing inside "System" namespace and not for any user defined methods.
-                                    if (variableDeclaratorResult.IsVariableDeclaratorSyntaxPresent && invExprSymbolInfo.Name.Equals("ToBase64String"))
+                                    if (variableDeclaratorResult.IsVariableDeclaratorSyntaxPresent && invExprSymbolInfo.Name.Equals("FromBase64String"))
                                     {
                                         var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, variableDeclaratorResult.VariableDeclaratorSyntaxNode.GetLocation());
                                         context.ReportDiagnostic(diagnsotics);
