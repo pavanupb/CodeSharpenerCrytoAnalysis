@@ -181,11 +181,11 @@ namespace CodeSharpenerCryptoAnalyzer
             ToAnalyzeCryslSection = new Dictionary<string, List<CryslJsonModel>>();
             CryslSectionList = new List<CryslJsonModel>();
 
-            foreach(var taintedContextDictionary in TaintedContextDictionary)
+            foreach (var taintedContextDictionary in TaintedContextDictionary)
             {
-                foreach(var taintedValueDictionary in taintedContextDictionary.Value)
+                foreach (var taintedValueDictionary in taintedContextDictionary.Value)
                 {
-                    if(taintedValueDictionary.Key.ContainingSymbolInfo.ToString().Equals(context.ContainingSymbol.ToString()))
+                    if (taintedValueDictionary.Key.ContainingSymbolInfo.ToString().Equals(context.ContainingSymbol.ToString()))
                     {
                         TaintedValuesDictionary.Add(new KeyValuePair<ContextInformation, ISymbol>(taintedValueDictionary.Key, taintedValueDictionary.Value));
                     }
@@ -209,7 +209,7 @@ namespace CodeSharpenerCryptoAnalyzer
                     //In order to make object sensitive, identifer symbol info should be retrieved
                     var identifierLeftExprNodes = StringLiteralPresentResult.ExpressionSyntax.Left.ChildNodes().OfType<IdentifierNameSyntax>();
                     ISymbol identifierLeftExprSymbolInfo = null;
-                    if(identifierLeftExprNodes.Count() > 0)
+                    if (identifierLeftExprNodes.Count() > 0)
                     {
                         identifierLeftExprSymbolInfo = context.SemanticModel.GetSymbolInfo(identifierLeftExprNodes.FirstOrDefault()).Symbol;
                     }
@@ -238,7 +238,7 @@ namespace CodeSharpenerCryptoAnalyzer
                         //In order to make object sensitive, identifer symbol info should be retrieved
                         var identifierRightExprNodes = assignmentExpression.Right.ChildNodes().OfType<IdentifierNameSyntax>();
                         ISymbol identifierRightExprSymbolInfo = null;
-                        if(identifierRightExprNodes.Count() > 0)
+                        if (identifierRightExprNodes.Count() > 0)
                         {
                             identifierRightExprSymbolInfo = context.SemanticModel.GetSymbolInfo(identifierRightExprNodes.FirstOrDefault()).Symbol;
                         }
@@ -247,14 +247,14 @@ namespace CodeSharpenerCryptoAnalyzer
                         {
                             ISymbol identifierLeftExprSymbolInfo = null;
                             var taintedRightSymbolInfo = IsTaintedValueExists(rightSymbolInfo.Symbol.ContainingSymbol, rightSymbolInfo.Symbol, identifierRightExprSymbolInfo);
-                            if(taintedRightSymbolInfo.IsTainted)
+                            if (taintedRightSymbolInfo.IsTainted)
                             {
                                 var leftSymbolInfo = context.SemanticModel.GetSymbolInfo(assignmentExpression.Left);
 
                                 //In order to make object sensitive, identifier symbol info should be retrieved
                                 var identifierLeftExprNodes = assignmentExpression.Left.ChildNodes().OfType<IdentifierNameSyntax>();
-                                
-                                if(identifierLeftExprNodes.Count() > 0)
+
+                                if (identifierLeftExprNodes.Count() > 0)
                                 {
                                     identifierLeftExprSymbolInfo = context.SemanticModel.GetSymbolInfo(identifierLeftExprNodes.FirstOrDefault()).Symbol;
                                 }
@@ -274,10 +274,11 @@ namespace CodeSharpenerCryptoAnalyzer
                                         }
                                     }
                                 }
-                                var diagnostics = (taintedRightSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, expressionStatementNode.GetLocation(), taintedRightSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, expressionStatementNode.GetLocation());
-                                context.ReportDiagnostic(diagnostics);
-                            }                            
-                            else 
+                                ReportDiagnostics(context, HardCodedContextCheckViolationRule, HardCodedCheckViolationRule, expressionStatementNode.GetLocation(), taintedRightSymbolInfo.TaintedContextInformation);
+                                /*var diagnostics = (taintedRightSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, expressionStatementNode.GetLocation(), taintedRightSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, expressionStatementNode.GetLocation());
+                                context.ReportDiagnostic(diagnostics);*/
+                            }
+                            else
                             {
                                 var taintedRightInfo = IsTaintedValueExists(rightSymbolInfo.Symbol.ContainingSymbol, rightSymbolInfo.Symbol, identifierRightExprSymbolInfo);
                                 if (!taintedRightInfo.IsTainted)
@@ -337,8 +338,9 @@ namespace CodeSharpenerCryptoAnalyzer
                                     TaintedValuesDictionary.Add(new KeyValuePair<ContextInformation, ISymbol>(contextInformation, declaratorSymbolInfo));
                                 }
                             }
-                            var diagnostics = (taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, localDeclarationStatement.GetLocation(), taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
-                            context.ReportDiagnostic(diagnostics);
+                            ReportDiagnostics(context, HardCodedContextCheckViolationRule, HardCodedCheckViolationRule, localDeclarationStatement.GetLocation(), taintedIdentifierSymbolInfo.TaintedContextInformation);
+                            /*var diagnostics = (taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, localDeclarationStatement.GetLocation(), taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
+                            context.ReportDiagnostic(diagnostics);*/
                         }
                     }
                 }
@@ -443,8 +445,9 @@ namespace CodeSharpenerCryptoAnalyzer
                                             }
                                         }
                                     }
-                                    var diagnostics = (taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, arguments.GetLocation(), taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, arguments.GetLocation());
-                                    context.ReportDiagnostic(diagnostics);
+                                    ReportDiagnostics(context, HardCodedContextCheckViolationRule, HardCodedCheckViolationRule, arguments.GetLocation(), taintedIdentifierSymbolInfo.TaintedContextInformation);
+                                    /*var diagnostics = (taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, arguments.GetLocation(), taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, arguments.GetLocation());
+                                    context.ReportDiagnostic(diagnostics);*/
                                 }
                             }
                         }
@@ -504,8 +507,9 @@ namespace CodeSharpenerCryptoAnalyzer
                                                         var taintedArgumentSymbolInfo = IsTaintedValueExists(argumentSymbolInfo.Symbol.ContainingSymbol, argumentSymbolInfo.Symbol);
                                                         if (taintedArgumentSymbolInfo.IsTainted)
                                                         {
-                                                            var diagnsotics = (taintedArgumentSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, arguments.GetLocation(), taintedArgumentSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, arguments.GetLocation());
-                                                            context.ReportDiagnostic(diagnsotics);
+                                                            ReportDiagnostics(context, HardCodedContextCheckViolationRule, HardCodedCheckViolationRule, arguments.GetLocation(), taintedArgumentSymbolInfo.TaintedContextInformation);
+                                                            /*var diagnsotics = (taintedArgumentSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, arguments.GetLocation(), taintedArgumentSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, arguments.GetLocation());
+                                                            context.ReportDiagnostic(diagnsotics);*/
                                                         }
                                                     }
                                                 }
@@ -667,15 +671,16 @@ namespace CodeSharpenerCryptoAnalyzer
                                     lock (TaintedValuesDictionary)
                                     {
                                         ContextInformation contextInformation = new ContextInformation
-                                        {                                            
+                                        {
                                             CallerSymbolInfo = context.ContainingSymbol
                                         };
                                         TaintedValuesDictionary.Add(new KeyValuePair<ContextInformation, ISymbol>(contextInformation, declaratorSymbolInfo));
                                     }
                                 }
                             }
-                            var taintedDiagnsotics = (taintedInvocatorIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, node.GetLocation(), taintedInvocatorIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, node.GetLocation());
-                            context.ReportDiagnostic(taintedDiagnsotics);
+                            ReportDiagnostics(context, HardCodedContextCheckViolationRule, HardCodedCheckViolationRule, node.GetLocation(), taintedInvocatorIdentifierSymbolInfo.TaintedContextInformation);
+                            /*var taintedDiagnsotics = (taintedInvocatorIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, node.GetLocation(), taintedInvocatorIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, node.GetLocation());
+                            context.ReportDiagnostic(taintedDiagnsotics);*/
                         }
                     }
 
@@ -871,9 +876,10 @@ namespace CodeSharpenerCryptoAnalyzer
                             {
                                 var taintedArgumentSymbolInfo = IsTaintedValueExists(argumentSymbol.ContainingSymbol, argumentSymbol);
                                 if (taintedArgumentSymbolInfo.IsTainted)
-                                {                                    
-                                    var diagnsotics = (taintedArgumentSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, memAccessExpr.GetLocation(), taintedArgumentSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, memAccessExpr.GetLocation());
-                                    context.ReportDiagnostic(diagnsotics);
+                                {
+                                    ReportDiagnostics(context, HardCodedContextCheckViolationRule, HardCodedCheckViolationRule, memAccessExpr.GetLocation(), taintedArgumentSymbolInfo.TaintedContextInformation);
+                                    /*var diagnsotics = (taintedArgumentSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, memAccessExpr.GetLocation(), taintedArgumentSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, memAccessExpr.GetLocation());
+                                    context.ReportDiagnostic(diagnsotics);*/
                                     if (invExprSymbolInfo != null)
                                     {
                                         var taintedInvExprSymbolInfo = IsTaintedValueExists(invExprSymbolInfo, invExprSymbolInfo.Parameters[i]);
@@ -929,8 +935,9 @@ namespace CodeSharpenerCryptoAnalyzer
                                         }
                                         else
                                         {
-                                            var diagnsotics = (taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, identifierNameNode.GetLocation(), taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, identifierNameNode.GetLocation());
-                                            context.ReportDiagnostic(diagnsotics);
+                                            ReportDiagnostics(context, HardCodedContextCheckViolationRule, HardCodedCheckViolationRule, identifierNameNode.GetLocation(), taintedIdentifierSymbolInfo.TaintedContextInformation);
+                                            /*var diagnsotics = (taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, identifierNameNode.GetLocation(), taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, identifierNameNode.GetLocation());
+                                            context.ReportDiagnostic(diagnsotics);*/
                                         }
                                     }
                                     //Condition to check callee's tainted symbol info.
@@ -1229,9 +1236,10 @@ namespace CodeSharpenerCryptoAnalyzer
                                     };
                                     TaintedValuesDictionary.Add(new KeyValuePair<ContextInformation, ISymbol>(contextInformation, leftExprSymbolInfo));
                                 }
-                                var diagnsotics = (taintedRightExprSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, simpleAssExpr.GetLocation(), taintedRightExprSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, simpleAssExpr.GetLocation());
-                                context.ReportDiagnostic(diagnsotics);
                             }
+                            ReportDiagnostics(context, HardCodedContextCheckViolationRule, HardCodedCheckViolationRule, simpleAssExpr.GetLocation(), taintedRightExprSymbolInfo.TaintedContextInformation);
+                            /*var diagnsotics = (taintedRightExprSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, simpleAssExpr.GetLocation(), taintedRightExprSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, simpleAssExpr.GetLocation());
+                            context.ReportDiagnostic(diagnsotics);*/
                         }
                     }
 
@@ -1278,10 +1286,16 @@ namespace CodeSharpenerCryptoAnalyzer
 
         private static TaintQueryInformation IsTaintedValueExists(ISymbol containingMethod, ISymbol nodeInfo, ISymbol containingObject = null)
         {
+            TaintQueryInformation taintQueryResult = new TaintQueryInformation();
             try
             {
                 if (containingMethod != null && nodeInfo != null && containingObject == null)
                 {
+                    TaintQueryInformation taintQueryInformation = new TaintQueryInformation
+                    {
+                        IsTainted = false,
+                        TaintedContextInformation = new List<ContextInformation>()
+                    };
                     lock (TaintedValuesDictionary)
                     {
                         //If tainted values are not present in ContextDictionary check in Current TaintedValuesDictionary
@@ -1294,18 +1308,26 @@ namespace CodeSharpenerCryptoAnalyzer
 
                                 if (taintedValuePresent)
                                 {
-                                    return new TaintQueryInformation
+                                    taintQueryInformation.IsTainted = true;
+                                    taintQueryInformation.TaintedContextInformation.Add(taintedValue.Key);
+                                    /*return new TaintQueryInformation
                                     {
                                         IsTainted = true,
                                         TaintedContextInformation = taintedValue.Key
-                                    };
+                                    };*/
                                 }
                             }
                         }
                     }
+                    taintQueryResult = taintQueryInformation;
                 }
-                else if(containingMethod != null && nodeInfo != null && containingObject != null)
+                else if (containingMethod != null && nodeInfo != null && containingObject != null)
                 {
+                    TaintQueryInformation taintQueryInformation = new TaintQueryInformation
+                    {
+                        IsTainted = false,
+                        TaintedContextInformation = new List<ContextInformation>()
+                    };
                     lock (TaintedValuesDictionary)
                     {
                         //If tainted values are not present in ContextDictionary check in Current TaintedValuesDictionary
@@ -1318,30 +1340,48 @@ namespace CodeSharpenerCryptoAnalyzer
 
                                 if (taintedValuePresent)
                                 {
-                                    return new TaintQueryInformation
+                                    taintQueryInformation.IsTainted = true;
+                                    taintQueryInformation.TaintedContextInformation.Add(taintedValue.Key);
+
+                                    /*return new TaintQueryInformation
                                     {
                                         IsTainted = true,
                                         TaintedContextInformation = taintedValue.Key
-                                    };
+                                    };*/
                                 }
                             }
                         }
                     }
+                    taintQueryResult = taintQueryInformation;
                 }
             }
             catch (Exception ex)
             {
                 //Log the exception into a log file
             }
-            return new TaintQueryInformation
+            return taintQueryResult;
+        }
+
+        private static void ReportDiagnostics(SyntaxNodeAnalysisContext context, DiagnosticDescriptor descriptionContextInfo, DiagnosticDescriptor descriptorInfo, Location location, List<ContextInformation> contextInformationList)
+        {
+            foreach (var contextInformation in contextInformationList)
             {
-                IsTainted = false
-            };
+                if (contextInformation.CallerSymbolInfo != null)
+                {
+                    var diagnostic = Diagnostic.Create(descriptionContextInfo, location, contextInformation.CallerSymbolInfo.ToString());
+                    context.ReportDiagnostic(diagnostic);
+                }
+                else
+                {
+                    var diagnostic = Diagnostic.Create(descriptorInfo, location);
+                    context.ReportDiagnostic(diagnostic);
+                }
+            }
         }
 
         private static void SanitizeTaintValue(ISymbol containingMethod, ISymbol nodeInfo, ISymbol containingObject)
         {
-            List<KeyValuePair<ContextInformation, ISymbol>> sanitizedValues = new List<KeyValuePair<ContextInformation, ISymbol>>();        
+            List<KeyValuePair<ContextInformation, ISymbol>> sanitizedValues = new List<KeyValuePair<ContextInformation, ISymbol>>();
 
             //TaintedValuesDictionary need not be checked for context, because it contains only current context values
             foreach (var taintedValue in TaintedValuesDictionary)
@@ -1360,7 +1400,7 @@ namespace CodeSharpenerCryptoAnalyzer
                         }
                     }
                 }
-                else if(containingMethod != null && nodeInfo != null && containingObject != null)
+                else if (containingMethod != null && nodeInfo != null && containingObject != null)
                 {
                     if (taintedValue.Key.ContainingObjectSymbolInfo != null)
                     {
@@ -1458,7 +1498,7 @@ namespace CodeSharpenerCryptoAnalyzer
             //Check for different Crysl files
             if (Directory.Exists(cryslConfigurations.CryslConfiguration.CryslPath))
             {
-                IsTaintAnalysisOff = cryslConfigurations.CryslConfiguration.IsTaintAnalysisOff;                
+                IsTaintAnalysisOff = cryslConfigurations.CryslConfiguration.IsTaintAnalysisOff;
                 IsCryslFilePresent = true;
                 string[] cryslFiles = Directory.GetFiles(cryslConfigurations.CryslConfiguration.CryslPath, "*.crysl");
                 foreach (var cryslFile in cryslFiles)
@@ -1483,7 +1523,7 @@ namespace CodeSharpenerCryptoAnalyzer
                         }
                     }
                 }
-            }            
+            }
         }
 
         private void AnalyzeUsingBlock(OperationAnalysisContext context)
@@ -1694,23 +1734,23 @@ namespace CodeSharpenerCryptoAnalyzer
         private static VariableDeclaratorSyntaxResult GetVariableDeclarator(SyntaxNode syntaxNode, SyntaxNodeAnalysisContext context)
         {
             var variableDeclaratorSyntax = syntaxNode.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>();
-            VariableDeclaratorSyntaxResult variableDeclaratorSyntaxResult = new VariableDeclaratorSyntaxResult(); 
-            if(variableDeclaratorSyntax.Count() > 0)
+            VariableDeclaratorSyntaxResult variableDeclaratorSyntaxResult = new VariableDeclaratorSyntaxResult();
+            if (variableDeclaratorSyntax.Count() > 0)
             {
                 var variableDeclaratorSymbolInfo = context.SemanticModel.GetDeclaredSymbol(variableDeclaratorSyntax.FirstOrDefault());
-                if(variableDeclaratorSymbolInfo.Kind.Equals(SymbolKind.Local))
+                if (variableDeclaratorSymbolInfo.Kind.Equals(SymbolKind.Local))
                 {
                     var variableDeclaratorLocalInfo = (ILocalSymbol)variableDeclaratorSymbolInfo;
-                    if(variableDeclaratorLocalInfo.Type.ToString().Equals("byte[]"))
+                    if (variableDeclaratorLocalInfo.Type.ToString().Equals("byte[]"))
                     {
                         variableDeclaratorSyntaxResult.IsVariableDeclaratorSyntaxPresent = true;
                         variableDeclaratorSyntaxResult.VariableDeclaratorSyntaxNode = variableDeclaratorSyntax.FirstOrDefault();
                         variableDeclaratorSyntaxResult.VariableDeclaratorSymbolInfo = variableDeclaratorSymbolInfo;
 
                     }
-                    
+
                 }
-                
+
             }
 
             return variableDeclaratorSyntaxResult;

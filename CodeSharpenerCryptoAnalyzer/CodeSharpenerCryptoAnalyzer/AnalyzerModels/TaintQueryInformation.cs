@@ -9,6 +9,6 @@ namespace CodeSharpenerCryptoAnalyzer.AnalyzerModels
     public class TaintQueryInformation
     {
         public bool IsTainted { get; set; }
-        public ContextInformation TaintedContextInformation { get; set; }
+        public List<ContextInformation> TaintedContextInformation { get; set; }
     }
 }
