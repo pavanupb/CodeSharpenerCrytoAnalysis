@@ -165,6 +165,15 @@
     <value>Event Constraint Violation</value>
     <comment>The title of the diagnostic.</comment>
   </data>
+  <data name="HardCodedContextDescription" xml:space="preserve">
+    <value>Hard-Coded Key and IV value could lead to Security Vulnerability and includes context information</value>
+  </data>
+  <data name="HardCodedContextMessageFormat" xml:space="preserve">
+    <value>Hard-Coded Key and IV value could lead to Security Vulnerability Context is '{0}'</value>
+  </data>
+  <data name="HardCodedContextTitle" xml:space="preserve">
+    <value>The Key and IV value should not be hardcoded and includes context information</value>
+  </data>
   <data name="HardCodedDescription" xml:space="preserve">
     <value>Hard-Coded Key and IV value could lead to Security Vulnerability</value>
   </data>

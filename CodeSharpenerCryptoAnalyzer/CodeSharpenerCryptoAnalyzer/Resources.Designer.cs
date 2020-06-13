@@ -196,6 +196,33 @@ namespace CodeSharpenerCryptoAnalyzer {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Hard-Coded Key and IV value could lead to Security Vulnerability and includes context information.
+        /// </summary>
+        internal static string HardCodedContextDescription {
+            get {
+                return ResourceManager.GetString("HardCodedContextDescription", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Hard-Coded Key and IV value could lead to Security Vulnerability Context is &apos;{0}&apos;.
+        /// </summary>
+        internal static string HardCodedContextMessageFormat {
+            get {
+                return ResourceManager.GetString("HardCodedContextMessageFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The Key and IV value should not be hardcoded and includes context information.
+        /// </summary>
+        internal static string HardCodedContextTitle {
+            get {
+                return ResourceManager.GetString("HardCodedContextTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Hard-Coded Key and IV value could lead to Security Vulnerability.
         /// </summary>
         internal static string HardCodedDescription {
