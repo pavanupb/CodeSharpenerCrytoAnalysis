@@ -185,9 +185,12 @@ namespace CodeSharpenerCryptoAnalyzer
             {
                 foreach (var taintedValueDictionary in taintedContextDictionary.Value)
                 {
-                    if (taintedValueDictionary.Key.ContainingSymbolInfo.ToString().Equals(context.ContainingSymbol.ToString()))
+                    if (taintedValueDictionary.Key.ContainingSymbolInfo != null)
                     {
-                        TaintedValuesDictionary.Add(new KeyValuePair<ContextInformation, ISymbol>(taintedValueDictionary.Key, taintedValueDictionary.Value));
+                        if (taintedValueDictionary.Key.ContainingSymbolInfo.ToString().Equals(context.ContainingSymbol.ToString()))
+                        {
+                            TaintedValuesDictionary.Add(new KeyValuePair<ContextInformation, ISymbol>(taintedValueDictionary.Key, taintedValueDictionary.Value));
+                        }
                     }
                 }
             }
@@ -411,43 +414,52 @@ namespace CodeSharpenerCryptoAnalyzer
             ICommonUtilities commonUtilities = _serviceProvider.GetService<ICommonUtilities>();
             var argumentsList = objectCreationNode.ChildNodes().OfType<ArgumentListSyntax>();
 
-            //Check for tainted string arguments
-            foreach (var argumentListSyntax in argumentsList)
+            var objectSymbolInfo = context.SemanticModel.GetSymbolInfo(objectCreationNode).Symbol;
+
+            if (objectSymbolInfo != null)
             {
-                var argumentSyntaxList = argumentListSyntax.Arguments;
-                if (argumentSyntaxList != null)
+                //Check only for string instances
+                if (objectSymbolInfo.ContainingSymbol.ToString().Equals("System.String") || objectSymbolInfo.ContainingSymbol.ToString().Equals("System.Text.StringBuilder"))
                 {
-                    foreach (var arguments in argumentSyntaxList)
+                    //Check for tainted string arguments
+                    foreach (var argumentListSyntax in argumentsList)
                     {
-                        var identifierArgumentNode = arguments.ChildNodes().OfType<IdentifierNameSyntax>();
-                        if (identifierArgumentNode.Count() != 0)
+                        var argumentSyntaxList = argumentListSyntax.Arguments;
+                        if (argumentSyntaxList != null)
                         {
-                            var identifierSymbolInfo = context.SemanticModel.GetSymbolInfo(identifierArgumentNode.FirstOrDefault()).Symbol;
-                            if (identifierSymbolInfo != null)
+                            foreach (var arguments in argumentSyntaxList)
                             {
-                                var taintedIdentifierSymbolInfo = IsTaintedValueExists(identifierSymbolInfo.ContainingSymbol, identifierSymbolInfo);
-                                if (taintedIdentifierSymbolInfo.IsTainted)
+                                var identifierArgumentNode = arguments.ChildNodes().OfType<IdentifierNameSyntax>();
+                                if (identifierArgumentNode.Count() != 0)
                                 {
-                                    var declaratorSyntaxNode = objectCreationNode.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>();
-                                    if (declaratorSyntaxNode.Count() != 0)
+                                    var identifierSymbolInfo = context.SemanticModel.GetSymbolInfo(identifierArgumentNode.FirstOrDefault()).Symbol;
+                                    if (identifierSymbolInfo != null)
                                     {
-                                        var declaratorSymbolInfo = context.SemanticModel.GetDeclaredSymbol(declaratorSyntaxNode.FirstOrDefault());
-                                        var taintedDeclaratorSymbolInfo = IsTaintedValueExists(declaratorSymbolInfo.ContainingSymbol, declaratorSymbolInfo);
-                                        if (!taintedDeclaratorSymbolInfo.IsTainted)
+                                        var taintedIdentifierSymbolInfo = IsTaintedValueExists(identifierSymbolInfo.ContainingSymbol, identifierSymbolInfo);
+                                        if (taintedIdentifierSymbolInfo.IsTainted)
                                         {
-                                            lock (TaintedValuesDictionary)
+                                            var declaratorSyntaxNode = objectCreationNode.AncestorsAndSelf().OfType<VariableDeclaratorSyntax>();
+                                            if (declaratorSyntaxNode.Count() != 0)
                                             {
-                                                ContextInformation contextInformation = new ContextInformation
+                                                var declaratorSymbolInfo = context.SemanticModel.GetDeclaredSymbol(declaratorSyntaxNode.FirstOrDefault());
+                                                var taintedDeclaratorSymbolInfo = IsTaintedValueExists(declaratorSymbolInfo.ContainingSymbol, declaratorSymbolInfo);
+                                                if (!taintedDeclaratorSymbolInfo.IsTainted)
                                                 {
-                                                    ContainingSymbolInfo = declaratorSymbolInfo.ContainingSymbol
-                                                };
-                                                TaintedValuesDictionary.Add(new KeyValuePair<ContextInformation, ISymbol>(contextInformation, declaratorSymbolInfo));
+                                                    lock (TaintedValuesDictionary)
+                                                    {
+                                                        ContextInformation contextInformation = new ContextInformation
+                                                        {
+                                                            ContainingSymbolInfo = declaratorSymbolInfo.ContainingSymbol
+                                                        };
+                                                        TaintedValuesDictionary.Add(new KeyValuePair<ContextInformation, ISymbol>(contextInformation, declaratorSymbolInfo));
+                                                    }
+                                                }
                                             }
+                                            ReportDiagnostics(context, HardCodedContextCheckViolationRule, HardCodedCheckViolationRule, arguments.GetLocation(), taintedIdentifierSymbolInfo.TaintedContextInformation);
+                                            /*var diagnostics = (taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, arguments.GetLocation(), taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, arguments.GetLocation());
+                                            context.ReportDiagnostic(diagnostics);*/
                                         }
                                     }
-                                    ReportDiagnostics(context, HardCodedContextCheckViolationRule, HardCodedCheckViolationRule, arguments.GetLocation(), taintedIdentifierSymbolInfo.TaintedContextInformation);
-                                    /*var diagnostics = (taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo != null) ? Diagnostic.Create(HardCodedContextCheckViolationRule, arguments.GetLocation(), taintedIdentifierSymbolInfo.TaintedContextInformation.CallerSymbolInfo.ToString()) : Diagnostic.Create(HardCodedCheckViolationRule, arguments.GetLocation());
-                                    context.ReportDiagnostic(diagnostics);*/
                                 }
                             }
                         }
