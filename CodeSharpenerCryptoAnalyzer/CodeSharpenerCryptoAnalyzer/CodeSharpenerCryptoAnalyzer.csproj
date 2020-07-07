@@ -5,7 +5,8 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>    
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType> 
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackBuildOutputs</TargetsForTfmSpecificContentInPackage>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -58,5 +59,16 @@
       <HintPath>bin\Debug\net4.7.2\Microsoft.Extensions.DependencyInjection.Abstractions.dll</HintPath>
     </Reference>
   </ItemGroup>
+  
+   <Target Name="PackBuildOutputs" DependsOnTargets="ResolveProjectReferences;SatelliteDllsProjectOutputGroup;SatelliteDllsProjectOutputGroupDependencies">
+    <ItemGroup>
+      <!-- Analysis of C# projects -->
+      <TfmSpecificPackageFile Include="$(TargetPath)" PackagePath="analyzers\cs\" />
+      <TfmSpecificPackageFile Include="@(SatelliteDllsProjectOutputGroupDependency)" PackagePath="analyzers\cs\%(SatelliteDllsProjectOutputGroupDependency.DestinationSubDirectory)" Condition=" '%(SatelliteDllsProjectOutputGroupDependency.DestinationSubDirectory)' != '' " />
+      <TfmSpecificPackageFile Include="@(SatelliteDllsProjectOutputGroupOutput->'%(FinalOutputPath)')" PackagePath="analyzers\cs\%(SatelliteDllsProjectOutputGroupOutput.Culture)\" />
+      <TfmSpecificPackageFile Include="%(_ResolvedProjectReferencePaths.Identity)" Condition="'%(FileName)' != 'Microsoft.VisualStudio.Threading.Analyzers.VisualBasic'" PackagePath="analyzers\cs\" />
+      
+    </ItemGroup>
+  </Target>
 
 </Project>
