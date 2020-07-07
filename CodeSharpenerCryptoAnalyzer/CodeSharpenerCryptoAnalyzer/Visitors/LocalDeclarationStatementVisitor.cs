@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace CodeSharpenerCryptoAnalyzer.Visitors
 {
-    public class LocalDeclarationStatementVisitor : CSharpSyntaxWalker
+    public class LocalDeclarationStatementVisitor : CSharpSyntaxWalker, ILocalDeclarationStatementVisitor
     {
         private bool IsArrayInitializerPresent;
         private bool IsStringLiteralExpressionPresent;

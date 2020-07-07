@@ -2,6 +2,12 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Description>CodeSharpenerCryptoAnalyzer</Description>
+    <Copyright>CodeSharpenerCryptoAnalyzer</Copyright>
+    <Authors>Pavan</Authors>
+    <Company>Pavan</Company>
+    <PackageTags>CodeSharpenerCryptoAnalyzer, analyzers</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

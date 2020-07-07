@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace CodeSharpenerCryptoAnalyzer.Visitors
 {
-    public class ArgumentsVisitor : CSharpSyntaxWalker
+    public class ArgumentsVisitor : CSharpSyntaxWalker, IArgumentVisitor
     {
         private bool IsIdentiferPresent;
         private IdentifierNameSyntax IdentiferNameNode;

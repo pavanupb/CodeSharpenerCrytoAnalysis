@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace CodeSharpenerCryptoAnalyzer.Visitors
 {
-    public class ExpressionStatementVisitor : CSharpSyntaxWalker
+    public class ExpressionStatementVisitor : CSharpSyntaxWalker, IExpressionStatementVisitor
     {
         private bool IsStringLiteralExpressionPresent;
         private AssignmentExpressionSyntax AssignmentExpressionSyntax;

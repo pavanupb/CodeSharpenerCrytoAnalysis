@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using Antlr4.Runtime.Sharpen;
 using CodeSharpenerCryptoAnalysis.AnalyzerModels;
 using CodeSharpenerCryptoAnalysis.CryslSectionsAnalyzers;
 using CodeSharpenerCryptoAnalysis.Models;
@@ -19,9 +20,6 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
-using Microsoft.CodeAnalysis.FlowAnalysis.DataFlow;
-using Microsoft.CodeAnalysis.FlowAnalysis.DataFlow.CopyAnalysis;
-using Microsoft.CodeAnalysis.FlowAnalysis.DataFlow.PointsToAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
@@ -38,7 +36,7 @@ namespace CodeSharpenerCryptoAnalyzer
         private const string EventCategory = "Violation";
         private static DiagnosticDescriptor EventViolationRule = new DiagnosticDescriptor(EventDiagnosticId, EventTitle, EventMessageFormat, EventCategory, DiagnosticSeverity.Warning, isEnabledByDefault: true, description: EventDescription);
 
-        public const string EventAggDiagnosticId = "EventViolationRule";
+        public const string EventAggDiagnosticId = "EventAggViolationRule";
         private static readonly LocalizableString EventAggTitle = new LocalizableResourceString(nameof(Resources.EventAggAnalyzerTitle), Resources.ResourceManager, typeof(Resources));
         private static readonly LocalizableString EventAggMessageFormat = new LocalizableResourceString(nameof(Resources.EventAggAnalyzerMessageFormat), Resources.ResourceManager, typeof(Resources));
         private static readonly LocalizableString EventAggDescription = new LocalizableResourceString(nameof(Resources.EventAggAnalyzerDescription), Resources.ResourceManager, typeof(Resources));
@@ -83,28 +81,30 @@ namespace CodeSharpenerCryptoAnalyzer
 
 
 
-        private static Dictionary<string, CryslJsonModel> _cryslSpecificationModel;
+        private static ConcurrentDictionary<string, CryslJsonModel> _cryslSpecificationModel;
         private static ServiceProvider _serviceProvider { get; set; }
 
-        private static Dictionary<string, List<AddConstraints>> AdditionalConstraintsDict;
+        private static ConcurrentDictionary<string, List<AddConstraints>> AdditionalConstraintsDict;
 
         private static List<KeyValuePair<string, string>> EventOrderContraint;
 
         //Events Related Dictionary
         //Key: Event_Var_Name
         //Value: List of MethodSignatureModel
-        private static Dictionary<string, Dictionary<string, List<MethodSignatureModel>>> ValidEventsDictionary;
+        private static ConcurrentDictionary<string, Dictionary<string, List<MethodSignatureModel>>> ValidEventsDictionary;
 
         //Dictionary of all analyzed events
-        private static Dictionary<string, Dictionary<string, List<KeyValuePair<string, string>>>> EventsOrderDictionary;
+        private static ConcurrentDictionary<string, Dictionary<string, List<KeyValuePair<string, string>>>> EventsOrderDictionary;
 
         private static List<KeyValuePair<ContextInformation, ISymbol>> TaintedValuesDictionary;
 
-        private static Dictionary<string, List<KeyValuePair<ContextInformation, ISymbol>>> TaintedContextDictionary;
+        private static ConcurrentDictionary<string, List<KeyValuePair<ContextInformation, ISymbol>>> TaintedContextDictionary;
 
-        private static Dictionary<string, List<CryslJsonModel>> ToAnalyzeCryslSection;
+        private static ConcurrentDictionary<string, List<CryslJsonModel>> ToAnalyzeCryslSection;
 
         private static List<CryslJsonModel> CryslSectionList;
+
+        private static List<Diagnostic> DiagnosticsList;
 
         private bool IsCryslFilePresent;
 
@@ -120,6 +120,9 @@ namespace CodeSharpenerCryptoAnalyzer
             services.AddTransient<IConstraintsSectionAnalyzer, ConstraintsSectionAnalyzer>();
             services.AddTransient<IOrderSectionAnalyzer, OrderSectionAnalyzer>();
             services.AddTransient<ICryslConfigurationBuilder, CryslConfigurationBuilder>();
+            services.AddTransient<IExpressionStatementVisitor, ExpressionStatementVisitor>();
+            services.AddTransient<ILocalDeclarationStatementVisitor, LocalDeclarationStatementVisitor>();
+            services.AddTransient<IArgumentVisitor, ArgumentsVisitor>();
             services.AddSingleton<ICryslObjectBuilder, CryslObjectBuilder>();
             _serviceProvider = services.BuildServiceProvider();
 
@@ -138,17 +141,22 @@ namespace CodeSharpenerCryptoAnalyzer
             context.RegisterSyntaxNodeAction(AnalyzeLocalDeclarationStatement, SyntaxKind.LocalDeclarationStatement, SyntaxKind.FieldDeclaration);
             context.RegisterSyntaxNodeAction(AnalyzeMethodDeclarationNode, SyntaxKind.MethodDeclaration);
             context.RegisterSyntaxNodeAction(AnalyzeExpressionStatement, SyntaxKind.ExpressionStatement);
-            context.RegisterCompilationStartAction(AnalyzeCompilationAction);
+            context.RegisterCompilationStartAction(AnalyzeCompilationAction);     
 
 
             //All global assignements to analyzer goes below           
-            AdditionalConstraintsDict = new Dictionary<string, List<AddConstraints>>();
-            ValidEventsDictionary = new Dictionary<string, Dictionary<string, List<MethodSignatureModel>>>();
-            EventsOrderDictionary = new Dictionary<string, Dictionary<string, List<KeyValuePair<string, string>>>>();
+            AdditionalConstraintsDict = new ConcurrentDictionary<string, List<AddConstraints>>();
+            ValidEventsDictionary = new ConcurrentDictionary<string, Dictionary<string, List<MethodSignatureModel>>>();
+            EventsOrderDictionary = new ConcurrentDictionary<string, Dictionary<string, List<KeyValuePair<string, string>>>>();
             TaintedValuesDictionary = new List<KeyValuePair<ContextInformation, ISymbol>>();
             if (TaintedContextDictionary == null)
             {
-                TaintedContextDictionary = new Dictionary<string, List<KeyValuePair<ContextInformation, ISymbol>>>();
+                TaintedContextDictionary = new ConcurrentDictionary<string, List<KeyValuePair<ContextInformation, ISymbol>>>();
+            }
+
+            if(DiagnosticsList == null)
+            {
+                DiagnosticsList = new List<Diagnostic>();
             }
         }
 
@@ -175,10 +183,11 @@ namespace CodeSharpenerCryptoAnalyzer
             {
                 lock (TaintedContextDictionary)
                 {
-                    TaintedContextDictionary.Remove(context.ContainingSymbol.ToString());
+                    List<KeyValuePair<ContextInformation, ISymbol>> removedValue;
+                    TaintedContextDictionary.TryRemove(context.ContainingSymbol.ToString(), out removedValue);
                 }
             }
-            ToAnalyzeCryslSection = new Dictionary<string, List<CryslJsonModel>>();
+            ToAnalyzeCryslSection = new ConcurrentDictionary<string, List<CryslJsonModel>>();
             CryslSectionList = new List<CryslJsonModel>();
 
             foreach (var taintedContextDictionary in TaintedContextDictionary)
@@ -200,8 +209,8 @@ namespace CodeSharpenerCryptoAnalyzer
         {
             if (IsCryslFilePresent && !IsTaintAnalysisOff)
             {
-                var expressionStatementNode = (ExpressionStatementSyntax)context.Node;
-                ExpressionStatementVisitor expressionStatementVisitor = new ExpressionStatementVisitor();
+                var expressionStatementNode = (ExpressionStatementSyntax)context.Node;                
+                IExpressionStatementVisitor expressionStatementVisitor = _serviceProvider.GetService<IExpressionStatementVisitor>();
                 expressionStatementVisitor.VisitExpressionStatement(expressionStatementNode);
                 var StringLiteralPresentResult = expressionStatementVisitor.GetAssignmentExpressionResult();
 
@@ -228,7 +237,8 @@ namespace CodeSharpenerCryptoAnalyzer
                         TaintedValuesDictionary.Add(new KeyValuePair<ContextInformation, ISymbol>(contextInformation, leftExpressionSymbolInfo));
                     }
                     var diagnostics = Diagnostic.Create(HardCodedCheckViolationRule, StringLiteralPresentResult.ExpressionSyntax.GetLocation());
-                    context.ReportDiagnostic(diagnostics);
+                    DiagnosticsList.Add(diagnostics);
+                    //context.ReportDiagnostic(diagnostics);
                 }
 
                 var simpleAssignmentExpression = expressionStatementNode.ChildNodes().OfType<AssignmentExpressionSyntax>();
@@ -315,8 +325,8 @@ namespace CodeSharpenerCryptoAnalyzer
         {
             if (IsCryslFilePresent && !IsTaintAnalysisOff)
             {
-                var localDeclarationStatement = context.Node;
-                LocalDeclarationStatementVisitor localDeclarationStatementVisitor = new LocalDeclarationStatementVisitor();
+                var localDeclarationStatement = context.Node;                
+                ILocalDeclarationStatementVisitor localDeclarationStatementVisitor = _serviceProvider.GetService<ILocalDeclarationStatementVisitor>();
                 localDeclarationStatementVisitor.Visit(localDeclarationStatement);
 
                 var isIdentifierNameNode = localDeclarationStatementVisitor.GetIdentifierNameSyntaxResult();
@@ -371,7 +381,8 @@ namespace CodeSharpenerCryptoAnalyzer
                         if (dataFlowAnalysisResult.ReadOutside.Contains(nodeSymbolInfo))
                         {
                             var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
-                            context.ReportDiagnostic(diagnsotics);
+                            DiagnosticsList.Add(diagnsotics);
+                            //context.ReportDiagnostic(diagnsotics);
                         }
                     }
                 }
@@ -400,8 +411,16 @@ namespace CodeSharpenerCryptoAnalyzer
                         if (dataFlowAnalysisResult.ReadOutside.Contains(nodeSymbolInfo))
                         {
                             var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
-                            context.ReportDiagnostic(diagnsotics);
+                            DiagnosticsList.Add(diagnsotics);
+                            //context.ReportDiagnostic(diagnsotics);
                         }
+                    }
+                    //For field declarations report diagnostics without performing data flow analysis. Data flow analysis works within code blocks only
+                    else if(localDeclarationStatement.Kind().Equals(SyntaxKind.FieldDeclaration))
+                    {
+                        var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, localDeclarationStatement.GetLocation());
+                        DiagnosticsList.Add(diagnsotics);
+                        //context.ReportDiagnostic(diagnsotics);
                     }
                 }
             }
@@ -479,7 +498,7 @@ namespace CodeSharpenerCryptoAnalyzer
                         if (!ToAnalyzeCryslSection.ContainsKey(context.ContainingSymbol.ToString()))
                         {
                             CryslSectionList.Add(cryslSpecificationModel);
-                            ToAnalyzeCryslSection.Add(context.ContainingSymbol.ToString(), CryslSectionList);
+                            ToAnalyzeCryslSection.TryAdd(context.ContainingSymbol.ToString(), CryslSectionList);
                         }
                         else if (!CryslSectionList.Contains(cryslSpecificationModel))
                         {
@@ -507,8 +526,8 @@ namespace CodeSharpenerCryptoAnalyzer
                                         if (argumentList.Arguments != null)
                                         {
                                             foreach (var arguments in argumentList.Arguments)
-                                            {
-                                                ArgumentsVisitor argumentsVisitor = new ArgumentsVisitor();
+                                            {                                               
+                                                IArgumentVisitor argumentsVisitor = _serviceProvider.GetService<IArgumentVisitor>();
                                                 argumentsVisitor.Visit(arguments);
                                                 var isIdentifierPresent = argumentsVisitor.GetResult();
                                                 if (isIdentifierPresent.IsIdentifierNodePresent)
@@ -542,7 +561,8 @@ namespace CodeSharpenerCryptoAnalyzer
                                         if (!isAggConditionSatisfied)
                                         {
                                             var diagnsotics = Diagnostic.Create(EventAggViolationRule, objectCreationNode.GetLocation(), cryslSpecificationModel.Spec_Section.Class_Name, validEvents.PropertyName);
-                                            context.ReportDiagnostic(diagnsotics);
+                                            DiagnosticsList.Add(diagnsotics);
+                                            //context.ReportDiagnostic(diagnsotics);
                                         }
                                     }
                                     //Add single event to dictionary if aggregator not present.
@@ -570,7 +590,8 @@ namespace CodeSharpenerCryptoAnalyzer
                                                 }
 
                                                 var diagnsotics = Diagnostic.Create(ConstraintAnalyzerViolationRule, objectCreationNode.GetLocation(), constraints.NotSatisfiedParameter, validParameterValues);
-                                                context.ReportDiagnostic(diagnsotics);
+                                                DiagnosticsList.Add(diagnsotics);
+                                                //context.ReportDiagnostic(diagnsotics);
                                             }
                                         }
                                         //ReportConstraintsSection(context, satisfiedConstraintsList);
@@ -595,7 +616,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                             }
                                             lock (AdditionalConstraintsDict)
                                             {
-                                                AdditionalConstraintsDict.Add(identifierSymbolInfo.ReturnType.ToString(), addConstraintsList);
+                                                AdditionalConstraintsDict.TryAdd(identifierSymbolInfo.ReturnType.ToString(), addConstraintsList);
                                             }
                                         }
                                         //If key is present update the dictionary with the variable declarator
@@ -623,7 +644,8 @@ namespace CodeSharpenerCryptoAnalyzer
                                 {
                                     StringBuilder validEventsSig = commonUtilities.GetValidMethodSignatures(methods);
                                     var diagnsotic = Diagnostic.Create(EventViolationRule, objectCreationNode.GetLocation(), instantiatedMethodIdentifier.Identifier.Text, validEventsSig.ToString());
-                                    context.ReportDiagnostic(diagnsotic);
+                                    DiagnosticsList.Add(diagnsotic);
+                                    //context.ReportDiagnostic(diagnsotic);
                                 }
                             }
                         }
@@ -706,7 +728,7 @@ namespace CodeSharpenerCryptoAnalyzer
                             if (!ToAnalyzeCryslSection.ContainsKey(context.ContainingSymbol.ToString()))
                             {
                                 CryslSectionList.Add(cryslSpecificationModel);
-                                ToAnalyzeCryslSection.Add(context.ContainingSymbol.ToString(), CryslSectionList);
+                                ToAnalyzeCryslSection.TryAdd(context.ContainingSymbol.ToString(), CryslSectionList);
                             }
                             else if (!CryslSectionList.Contains(cryslSpecificationModel))
                             {
@@ -762,7 +784,8 @@ namespace CodeSharpenerCryptoAnalyzer
                                             if (!isAggConditionSatisfied)
                                             {
                                                 var diagnsotics = Diagnostic.Create(EventAggViolationRule, node.GetLocation(), cryslSpecificationModel.Spec_Section.Class_Name, validEvents.ValidMethods.MethodName);
-                                                context.ReportDiagnostic(diagnsotics);
+                                                DiagnosticsList.Add(diagnsotics);
+                                                //context.ReportDiagnostic(diagnsotics);
                                             }
                                         }
                                         //Add single event to dictionary if aggregator not present.
@@ -791,7 +814,8 @@ namespace CodeSharpenerCryptoAnalyzer
                                                     }
 
                                                     var diagnsotics = Diagnostic.Create(ConstraintAnalyzerViolationRule, node.GetLocation(), satisfiedConstraintsList.FirstOrDefault().NotSatisfiedParameter, validParameterValues);
-                                                    context.ReportDiagnostic(diagnsotics);
+                                                    DiagnosticsList.Add(diagnsotics);
+                                                    //context.ReportDiagnostic(diagnsotics);
                                                 }
                                             }
                                             //ReportConstraintsSection(context, satisfiedConstraintsList);
@@ -818,7 +842,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                                     }
                                                     lock (AdditionalConstraintsDict)
                                                     {
-                                                        AdditionalConstraintsDict.Add(identifierSymbolInfo.ReturnType.ToString(), addConstraintsList);
+                                                        AdditionalConstraintsDict.TryAdd(identifierSymbolInfo.ReturnType.ToString(), addConstraintsList);
                                                     }
                                                 }
                                             }
@@ -851,7 +875,8 @@ namespace CodeSharpenerCryptoAnalyzer
                                     {
                                         StringBuilder validEventsSig = commonUtilities.GetValidMethodSignatures(methods);
                                         var diagnsotic = Diagnostic.Create(EventViolationRule, node.GetLocation(), invokedMethod.Identifier.Text, validEventsSig.ToString());
-                                        context.ReportDiagnostic(diagnsotic);
+                                        DiagnosticsList.Add(diagnsotic);
+                                        //context.ReportDiagnostic(diagnsotic);
                                     }
                                 }
                             }
@@ -863,7 +888,8 @@ namespace CodeSharpenerCryptoAnalyzer
                                 if (Type.GetType(invocatorType).BaseType.FullName.Equals(cryslSpecificationModel.Spec_Section.Class_Name) && !Type.GetType(invocatorType).FullName.Equals("System.Security.Cryptography.KeyedHashAlgorithm"))
                                 {
                                     var diagnsotics = Diagnostic.Create(DerivedTypeRule, invocationExpressionNode.GetLocation(), invocatorType, cryslSpecificationModel.Spec_Section.Class_Name);
-                                    context.ReportDiagnostic(diagnsotics);
+                                    DiagnosticsList.Add(diagnsotics);
+                                    //context.ReportDiagnostic(diagnsotics);
                                 }
                             }
                         }
@@ -931,7 +957,8 @@ namespace CodeSharpenerCryptoAnalyzer
                                         if (variableDeclaratorResult.IsVariableDeclaratorSyntaxPresent && invExprSymbolInfo.Name.Equals("FromBase64String"))
                                         {
                                             var diagnsotics = Diagnostic.Create(HardCodedCheckViolationRule, variableDeclaratorResult.VariableDeclaratorSyntaxNode.GetLocation());
-                                            context.ReportDiagnostic(diagnsotics);
+                                            DiagnosticsList.Add(diagnsotics);
+                                            //context.ReportDiagnostic(diagnsotics);
                                             var taintedVariableDeclaratorResult = IsTaintedValueExists(variableDeclaratorResult.VariableDeclaratorSymbolInfo.ContainingSymbol, variableDeclaratorResult.VariableDeclaratorSymbolInfo);
                                             if (!taintedVariableDeclaratorResult.IsTainted)
                                             {
@@ -1034,7 +1061,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                     if (!ToAnalyzeCryslSection.ContainsKey(context.ContainingSymbol.ToString()))
                                     {
                                         CryslSectionList.Add(cryslSpecificationModel);
-                                        ToAnalyzeCryslSection.Add(context.ContainingSymbol.ToString(), CryslSectionList);
+                                        ToAnalyzeCryslSection.TryAdd(context.ContainingSymbol.ToString(), CryslSectionList);
                                     }
                                     else if (!CryslSectionList.Contains(cryslSpecificationModel))
                                     {
@@ -1082,7 +1109,8 @@ namespace CodeSharpenerCryptoAnalyzer
                                                         validParameterValues = string.Join(",", accepetedParameterValues.FirstOrDefault());
                                                     }
                                                     var diagnsotics = Diagnostic.Create(ConstraintAnalyzerViolationRule, simpleAssExpr.GetLocation(), rightExprValue, validParameterValues);
-                                                    context.ReportDiagnostic(diagnsotics);
+                                                    DiagnosticsList.Add(diagnsotics);
+                                                    //context.ReportDiagnostic(diagnsotics);
                                                 }
 
                                                 //Check if additional constraints are satisfied if any
@@ -1107,7 +1135,8 @@ namespace CodeSharpenerCryptoAnalyzer
                                                                     validParameterValues = string.Join(",", validValues.FirstOrDefault());
                                                                 }
                                                                 var diagnsotics = Diagnostic.Create(ConstraintAnalyzerViolationRule, simpleAssExpr.GetLocation(), rightExprValue, validParameterValues);
-                                                                context.ReportDiagnostic(diagnsotics);
+                                                                DiagnosticsList.Add(diagnsotics);
+                                                                //context.ReportDiagnostic(diagnsotics);
                                                             }
                                                         }
                                                     }
@@ -1381,12 +1410,14 @@ namespace CodeSharpenerCryptoAnalyzer
                 if (contextInformation.CallerSymbolInfo != null)
                 {
                     var diagnostic = Diagnostic.Create(descriptionContextInfo, location, contextInformation.CallerSymbolInfo.ToString());
-                    context.ReportDiagnostic(diagnostic);
+                    DiagnosticsList.Add(diagnostic);
+                    //context.ReportDiagnostic(diagnostic);
                 }
                 else
                 {
                     var diagnostic = Diagnostic.Create(descriptorInfo, location);
-                    context.ReportDiagnostic(diagnostic);
+                    DiagnosticsList.Add(diagnostic);
+                    //context.ReportDiagnostic(diagnostic);
                 }
             }
         }
@@ -1478,7 +1509,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                                                     context.CancellationToken
                                                                     );
 
-            var aliasAnalysisResult = CopyAnalysis.TryGetOrComputeResult(
+            var pointsToAnalysisResult = CopyAnalysis.TryGetOrComputeResult(
                 context.GetControlFlowGraph(),
                 context.ContainingSymbol,
                 context.Options,
@@ -1496,15 +1527,43 @@ namespace CodeSharpenerCryptoAnalyzer
 
         }
 
+        /*private void ComputePointerInformation(OperationAnalysisContext context)
+        {
+            WellKnownTypeProvider provider = WellKnownTypeProvider.GetOrCreate(context.Compilation);
+
+            InterproceduralAnalysisConfiguration interproceduralAnalysisConfiguration = InterproceduralAnalysisConfiguration.Create(
+                                                                    context.Options,
+                                                                    SupportedDiagnostics,
+                                                                    InterproceduralAnalysisKind.ContextSensitive,
+                                                                    context.CancellationToken
+                                                                    );
+
+            var pointsToAnalysisResult = PointsToAnalysis.TryGetOrComputeResult(
+                context.GetControlFlowGraph(),
+                context.ContainingSymbol,
+                context.Options,
+                provider,
+                interproceduralAnalysisConfiguration,
+                interproceduralAnalysisPredicateOpt: null
+                );
+        }*/
+
         private void AnalyzeCompilationAction(CompilationStartAnalysisContext context)
         {
+            context.RegisterCompilationEndAction(AnalyzeCompilationEndAction);
+            //context.RegisterOperationAction(ComputePointerInformation, OperationKind.MethodBodyOperation);
             ICryslConfigurationBuilder cryslConfigurationBuilder = _serviceProvider.GetService<ICryslConfigurationBuilder>();
             CryslSettings cryslConfigurations = cryslConfigurationBuilder.GetCryslConfigurations(context.Options.AdditionalFiles);
+
+            if(cryslConfigurations.CryslConfiguration.IsTaintAnalysisOff)
+            {
+                TaintedContextDictionary = new ConcurrentDictionary<string, List<KeyValuePair<ContextInformation, ISymbol>>>();
+            }
 
             ICryslObjectBuilder cSharpObjectBuilder = _serviceProvider.GetService<ICryslObjectBuilder>();
             if (_cryslSpecificationModel == null)
             {
-                _cryslSpecificationModel = new Dictionary<string, CryslJsonModel>();
+                _cryslSpecificationModel = new ConcurrentDictionary<string, CryslJsonModel>();
             }
 
             //Check for different Crysl files
@@ -1522,20 +1581,31 @@ namespace CodeSharpenerCryptoAnalyzer
                         {
                             lock (_cryslSpecificationModel)
                             {
-                                _cryslSpecificationModel.Remove(cryslFile);
-                                _cryslSpecificationModel.Add(cryslFile, cryslCompilationModel.CryslModel);
+                                CryslJsonModel cryslJsonModel;
+                                _cryslSpecificationModel.TryRemove(cryslFile, out cryslJsonModel);
+                                _cryslSpecificationModel.TryAdd(cryslFile, cryslCompilationModel.CryslModel);
                             }
                         }
                         else
                         {
                             lock (_cryslSpecificationModel)
                             {
-                                _cryslSpecificationModel.Add(cryslFile, cryslCompilationModel.CryslModel);
+                                _cryslSpecificationModel.TryAdd(cryslFile, cryslCompilationModel.CryslModel);
                             }
                         }
                     }
                 }
             }
+        }
+
+        private void AnalyzeCompilationEndAction(CompilationAnalysisContext context)
+        {
+            foreach(var diagnotic in DiagnosticsList)
+            {
+                context.ReportDiagnostic(diagnotic);
+            }
+            DiagnosticsList.Clear();
+
         }
 
         private void AnalyzeUsingBlock(OperationAnalysisContext context)
@@ -1620,7 +1690,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                             }
                                             else
                                             {
-                                                ValidEventsDictionary.Add(cryslSpecificationModel.Spec_Section.Class_Name, validEventsDictionary);
+                                                ValidEventsDictionary.TryAdd(cryslSpecificationModel.Spec_Section.Class_Name, validEventsDictionary);
                                             }
                                         }
                                         else
@@ -1643,7 +1713,7 @@ namespace CodeSharpenerCryptoAnalyzer
                                             }
                                             else
                                             {
-                                                ValidEventsDictionary.Add(cryslSpecificationModel.Spec_Section.Class_Name, validEventsDictionary);
+                                                ValidEventsDictionary.TryAdd(cryslSpecificationModel.Spec_Section.Class_Name, validEventsDictionary);
                                             }
                                         }
                                     }
@@ -1706,7 +1776,8 @@ namespace CodeSharpenerCryptoAnalyzer
                                 {
                                     string validEventOrder = string.Join(", ", EventOrderContraint.Select(x => x.Value));
                                     var diagnsotics = Diagnostic.Create(OrderAnalyzerViolationRule, context.OwningSymbol.Locations[0], cryslSpecificationModel.Spec_Section.Class_Name, validEventOrder);
-                                    context.ReportDiagnostic(diagnsotics);
+                                    DiagnosticsList.Add(diagnsotics);
+                                    //context.ReportDiagnostic(diagnsotics);
                                 }
                             }
                         }
@@ -1720,14 +1791,20 @@ namespace CodeSharpenerCryptoAnalyzer
             {
                 lock (TaintedContextDictionary)
                 {
-                    TaintedContextDictionary.Add(context.OwningSymbol.ToString(), TaintedValuesDictionary.ToList());
+                    TaintedContextDictionary.TryAdd(context.OwningSymbol.ToString(), TaintedValuesDictionary.ToList());
                 }
             }
+
+            /*foreach(var diagnostic in DiagnosticsList)
+            {
+                context.ReportDiagnostic(diagnostic);
+            }*/
 
             //Clear the Events and Order Dictionary after Analyzing Each Method Block
             EventsOrderDictionary.Clear();
             ValidEventsDictionary.Clear();
             TaintedValuesDictionary.Clear();
+            //DiagnosticsList.Clear();
         }
 
         /// <summary>
@@ -1853,7 +1930,7 @@ namespace CodeSharpenerCryptoAnalyzer
                 }
                 else
                 {
-                    ValidEventsDictionary.Add(cryslSpecSection, validEventsDictionary);
+                    ValidEventsDictionary.TryAdd(cryslSpecSection, validEventsDictionary);
                 }
 
             }
@@ -1901,7 +1978,7 @@ namespace CodeSharpenerCryptoAnalyzer
                 }
                 else
                 {
-                    ValidEventsDictionary.Add(cryslSpecSection, validEventsDictionary);
+                    ValidEventsDictionary.TryAdd(cryslSpecSection, validEventsDictionary);
                 }
             }
             if (isEventPresent)
@@ -1911,7 +1988,7 @@ namespace CodeSharpenerCryptoAnalyzer
                 {
                     lock (EventsOrderDictionary)
                     {
-                        EventsOrderDictionary.Add(cryslSpecSection, eventsOrderDict);
+                        EventsOrderDictionary.TryAdd(cryslSpecSection, eventsOrderDict);
                     }
                 }
                 else
@@ -1929,7 +2006,7 @@ namespace CodeSharpenerCryptoAnalyzer
                 {
                     lock (EventsOrderDictionary)
                     {
-                        EventsOrderDictionary.Add(cryslSpecSection, eventsOrderDict);
+                        EventsOrderDictionary.TryAdd(cryslSpecSection, eventsOrderDict);
                     }
                 }
                 else
