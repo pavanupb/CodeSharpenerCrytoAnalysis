@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net4.7.2</TargetFramework>
+    <TargetFramework>netstandard2.0</TargetFramework>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -53,20 +53,14 @@
     <ProjectReference Include="..\..\CodeSharpenerCryptoAnalyzer.CryslBuilder\CodeSharpenerCryptoAnalyzer.CryslBuilder.csproj" />
     <ProjectReference Include="..\..\CodeSharpenerCryptoAnalzer.Common\CodeSharpenerCryptoAnalzer.Common.csproj" />
   </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="Microsoft.Extensions.DependencyInjection.Abstractions">
-      <HintPath>bin\Debug\net4.7.2\Microsoft.Extensions.DependencyInjection.Abstractions.dll</HintPath>
-    </Reference>
-  </ItemGroup>
+  
   
    <Target Name="PackBuildOutputs" DependsOnTargets="ResolveProjectReferences;SatelliteDllsProjectOutputGroup;SatelliteDllsProjectOutputGroupDependencies">
     <ItemGroup>
-      <!-- Analysis of C# projects -->
-      <TfmSpecificPackageFile Include="$(TargetPath)" PackagePath="analyzers\cs\" />
+      <!-- Analysis of C# projects -->     
       <TfmSpecificPackageFile Include="@(SatelliteDllsProjectOutputGroupDependency)" PackagePath="analyzers\cs\%(SatelliteDllsProjectOutputGroupDependency.DestinationSubDirectory)" Condition=" '%(SatelliteDllsProjectOutputGroupDependency.DestinationSubDirectory)' != '' " />
       <TfmSpecificPackageFile Include="@(SatelliteDllsProjectOutputGroupOutput->'%(FinalOutputPath)')" PackagePath="analyzers\cs\%(SatelliteDllsProjectOutputGroupOutput.Culture)\" />
-      <TfmSpecificPackageFile Include="%(_ResolvedProjectReferencePaths.Identity)" Condition="'%(FileName)' != 'Microsoft.VisualStudio.Threading.Analyzers.VisualBasic'" PackagePath="analyzers\cs\" />
+      <TfmSpecificPackageFile Include="%(_ResolvedProjectReferencePaths.Identity)" PackagePath="analyzers\cs\" />
       
     </ItemGroup>
   </Target>
